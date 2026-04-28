@@ -1,0 +1,617 @@
+:root {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-tertiary: #0f3460;
+  --bg-card: #222840;
+  --text-primary: #eaeaea;
+  --text-secondary: #a8a8a8;
+  --accent: #e94560;
+  --accent-hover: #c13651;
+  --success: #4caf50;
+  --error: #f44336;
+  --border-radius: 8px;
+  --transition: all 0.3s ease;
+  --selected-glow: 0 0 0 2px rgba(233, 69, 96, 0.5);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+header {
+  margin-bottom: 30px;
+  text-align: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+h1 {
+  font-size: 32px;
+  color: var(--text-primary);
+}
+
+h2 {
+  font-size: 24px;
+  margin-bottom: 20px;
+  color: var(--text-primary);
+}
+
+h3 {
+  font-size: 18px;
+  color: var(--text-primary);
+  margin-bottom: 15px;
+}
+
+.loading-message {
+  text-align: center;
+  padding: 40px 0;
+  color: var(--text-secondary);
+}
+
+.card {
+  background-color: var(--bg-card);
+  border-radius: var(--border-radius);
+  padding: 30px;
+  max-width: 500px;
+  margin: 0 auto;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+input[type="password"],
+input[type="text"] {
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--bg-tertiary);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 16px;
+  transition: var(--transition);
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(233, 69, 96, 0.2);
+}
+
+button {
+  padding: 12px 16px;
+  border-radius: var(--border-radius);
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.primary-button {
+  background-color: var(--accent);
+  color: white;
+  width: 100%;
+}
+
+.primary-button:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+}
+
+.secondary-button {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.secondary-button:hover:not(:disabled) {
+  background-color: var(--bg-secondary);
+}
+
+.delete-button {
+  background-color: transparent;
+  color: var(--error);
+  border: 1px solid var(--error);
+  margin-left: 10px;
+}
+
+.delete-button:hover:not(:disabled) {
+  background-color: var(--error);
+  color: white;
+}
+
+.error-message {
+  color: var(--error);
+  font-size: 14px;
+  text-align: center;
+  margin-top: 10px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.groups-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* =============================================
+   PHASE 6: Staggered Loading Animation
+   ============================================= */
+.group-card {
+  background-color: var(--bg-card);
+  border-radius: var(--border-radius);
+  padding: 20px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease, opacity 0.3s ease, box-shadow 0.3s ease;
+  
+  /* Staggered animation setup */
+  opacity: 0;
+  transform: translateY(20px);
+  animation: stagger-in 0.4s ease forwards;
+}
+
+@keyframes stagger-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =============================================
+   PHASE 3: Fade-out Animation for Soft Delete
+   ============================================= */
+.group-card.fade-out {
+  opacity: 0.3;
+  transform: scale(0.98);
+  pointer-events: none;
+}
+
+.tab-item.fade-out {
+  opacity: 0.3;
+  transform: translateX(-10px);
+  pointer-events: none;
+}
+
+.group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.group-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tabs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tab-item {
+  display: grid;
+  grid-template-columns: 20px 1fr 30px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--border-radius);
+  background-color: var(--bg-secondary);
+  transition: var(--transition);
+  cursor: pointer;
+  user-select: none;
+}
+
+.tab-item:hover {
+  background-color: var(--bg-tertiary);
+}
+
+/* =============================================
+   PHASE 6: Selected State for Tabs
+   ============================================= */
+.tab-item.selected {
+  background-color: var(--bg-tertiary);
+  border: 2px solid var(--accent);
+  box-shadow: var(--selected-glow);
+}
+
+.tab-item.focused {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+}
+
+.tab-delete-button {
+  background-color: transparent;
+  color: var(--error);
+  border: 1px solid var(--error);
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: var(--transition);
+}
+
+.tab-delete-button:hover {
+  background-color: var(--error);
+  color: white;
+  opacity: 1;
+}
+
+.favicon {
+  width: 16px;
+  height: 16px;
+  margin-right: 10px;
+}
+
+.favicon-placeholder {
+  width: 16px;
+  height: 16px;
+  margin-right: 10px;
+  border-radius: 2px;
+  background-color: var(--bg-tertiary);
+}
+
+.tab-link {
+  color: var(--text-primary);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-grow: 1;
+  pointer-events: none; /* Prevent link click interfering with selection */
+}
+
+.tab-item:not(.selected) .tab-link {
+  pointer-events: auto;
+}
+
+.tab-link:hover {
+  color: var(--accent);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 0;
+  color: var(--text-secondary);
+}
+
+.error {
+  color: var(--error);
+}
+
+/* =============================================
+   PHASE 3: Undo Toast Styles
+   ============================================= */
+.undo-toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  padding: 14px 20px;
+  border-radius: var(--border-radius);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  z-index: 1000;
+  animation: toast-in 0.3s ease;
+}
+
+.undo-toast.hidden {
+  display: none;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.undo-button {
+  background-color: var(--accent);
+  color: white;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.undo-button:hover {
+  background-color: var(--accent-hover);
+}
+
+.toast-timer {
+  color: var(--text-secondary);
+  font-size: 14px;
+  min-width: 35px;
+}
+
+/* =============================================
+   PHASE 5: Paste URLs Modal Styles
+   ============================================= */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1001;
+  animation: modal-bg-in 0.2s ease;
+}
+
+@keyframes modal-bg-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-content {
+  background-color: var(--bg-card);
+  border-radius: var(--border-radius);
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow: hidden;
+  animation: modal-content-in 0.3s ease;
+}
+
+@keyframes modal-content-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid var(--bg-tertiary);
+}
+
+.modal-header h3 {
+  margin: 0;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-description {
+  color: var(--text-secondary);
+  margin-bottom: 15px;
+  font-size: 14px;
+}
+
+.modal-body textarea {
+  width: 100%;
+  height: 200px;
+  padding: 12px;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--bg-tertiary);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  resize: vertical;
+  transition: var(--transition);
+}
+
+.modal-body textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 20px;
+  border-top: 1px solid var(--bg-tertiary);
+}
+
+.modal-footer .primary-button {
+  width: auto;
+}
+
+/* =============================================
+   PHASE 4: Incognito Warning Banner
+   ============================================= */
+.incognito-warning {
+  background-color: #ff980020;
+  border: 1px solid #ff9800;
+  border-radius: var(--border-radius);
+  padding: 12px 20px;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  color: #ffb74d;
+  font-size: 14px;
+}
+
+.dismiss-warning-btn {
+  background: transparent;
+  border: none;
+  color: #ffb74d;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.dismiss-warning-btn:hover {
+  color: #fff;
+}
+
+/* =============================================
+   PHASE 4: Settings Panel
+   ============================================= */
+.settings-panel {
+  background-color: var(--bg-card);
+  border-radius: var(--border-radius);
+  padding: 15px 20px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.setting-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.setting-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.setting-checkbox:hover {
+  color: var(--text-primary);
+}
+
+/* =============================================
+   Keyboard Shortcuts Help Bar
+   ============================================= */
+.shortcuts-help {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+  padding: 8px 20px;
+  font-size: 12px;
+  text-align: center;
+  border-top: 1px solid var(--bg-tertiary);
+}
+
+.shortcuts-help kbd {
+  background-color: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: inherit;
+  margin: 0 2px;
+}
+
+/* =============================================
+   Private Restore Button
+   ============================================= */
+.private-restore-button {
+  background-color: #7b1fa2;
+  color: white;
+}
+
+.private-restore-button:hover:not(:disabled) {
+  background-color: #6a1b9a;
+}
+
+/* =============================================
+   Responsive Design
+   ============================================= */
+@media (max-width: 768px) {
+  .container {
+    padding: 10px;
+    padding-bottom: 50px; /* Space for shortcuts bar */
+  }
+  
+  .group-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .group-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  
+  .shortcuts-help {
+    font-size: 10px;
+    padding: 6px 10px;
+  }
+  
+  .incognito-warning {
+    flex-direction: column;
+    text-align: center;
+  }
+}
