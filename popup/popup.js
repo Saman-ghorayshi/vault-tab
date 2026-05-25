@@ -257,9 +257,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         ciphertext: encrypted.ciphertext
       };
       
-      // Get existing groups and add new one AT THE END (The deliberate bug)
+      // Get existing groups and add new one AT THE BEGINNING (newest first)
       const groups = await getTabGroups();
-      groups.unshift(newGroup);
+      groups.unshift(newGroup); // ✅ CHANGED: .push() → .unshift()
       await saveTabGroups(groups);
       console.log('Tab group saved to storage');
       
