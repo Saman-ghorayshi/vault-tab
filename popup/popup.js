@@ -98,25 +98,54 @@ document.addEventListener('DOMContentLoaded', async () => {
   saveTabsButton.addEventListener('click', async () => {
     const sessionKey = await getSessionKey();
     if (!sessionKey) {
-      lockedView.classList.remove('hidden'); unlockedView.classList.add('hidden'); unlockView.classList.remove('hidden');
+      lockedView.classList.remove('hidden'); 
+      unlockedView.classList.add('hidden'); 
+      unlockView.classList.remove('hidden');
       return;
     }
     
-    saveTabsButton.disabled = true; saveTabsButton.textContent = 'Saving...';
+    saveTabsButton.disabled = true; 
+    saveTabsButton.textContent = 'Saving...';
     
     try {
-      const originalTabs = await chrome.tabs.query({ currentWindow: true, url: ["http://*/*", "https://*/*"] });
-      const validTabs = originalTabs.filter(tab => tab.status === 'complete');
+      // 🚀 PERFORMANCE FIX: Query all tabs at once without heavy match patterns
+      const originalTabs = await chrome.tabs.query({ currentWindow: true });
       
-      if (validTabs.length === 0) {
-        alert('No fully loaded tabs to save. Let your tabs finish loading first!');
-        saveTabsButton.disabled = false; saveTabsButton.textContent = 'Save All Tabs';
+      const tabsToSave = [];
+      const tabIdsToRemove = [];
+      const managerUrl = chrome.runtime.getURL('manager_page/manager.html');
+
+      for (let i = 0; i < originalTabs.length; i++) {
+        const tab = originalTabs[i];
+        
+        // use pendingUrl if the tab is still loading and url is empty
+        const targetUrl = tab.url || tab.pendingUrl;
+        
+        // skip invalid, system, or already open manager tabs
+        if (!targetUrl || targetUrl.startsWith('chrome://') || targetUrl.startsWith('chrome-extension://')) {
+          continue;
+        }
+        
+        tabsToSave.push({
+          title: tab.title || 'Loading...',
+          url: targetUrl,
+          favIconUrl: tab.favIconUrl || null
+        });
+
+        tabIdsToRemove.push(tab.id);
+      }
+      
+      if (tabsToSave.length === 0) {
+        alert('No saveable tabs found in this window.');
+        saveTabsButton.disabled = false; 
+        saveTabsButton.textContent = 'Save All Tabs';
         return;
       }
       
+      // Encrypt payload
       const tabData = {
         date: new Date().toISOString(),
-        tabs: validTabs.map(tab => ({ title: tab.title || 'Untitled', url: tab.url, favIconUrl: tab.favIconUrl || null }))
+        tabs: tabsToSave
       };
       
       const encrypted = await encrypt(JSON.stringify(tabData), sessionKey);
@@ -124,18 +153,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       groups.unshift({ id: Date.now().toString(), iv: encrypted.iv, ciphertext: encrypted.ciphertext }); 
       await saveTabGroups(groups);
       
-      // RESTORED PROFESSIONAL PATH
-      const managerTab = await chrome.tabs.create({ url: chrome.runtime.getURL('manager_page/manager.html') });
+      const managerTab = await chrome.tabs.create({ url: managerUrl });
       
-      const validTabIds = validTabs.map(tab => tab.id).filter(id => id !== managerTab.id);
-      if (validTabIds.length > 0) await chrome.tabs.remove(validTabIds);
+      const finalIdsToRemove = tabIdsToRemove.filter(id => id !== managerTab.id);
+      if (finalIdsToRemove.length > 0) {
+        await chrome.tabs.remove(finalIdsToRemove);
+      }
+      
       window.close();
     } catch (error) {
       alert(`Failed to save tabs: ${error.message}`);
-      saveTabsButton.disabled = false; saveTabsButton.textContent = 'Save All Tabs';
+      saveTabsButton.disabled = false; 
+      saveTabsButton.textContent = 'Save All Tabs';
     }
   });
-  
   viewTabsButton.addEventListener('click', async () => {
     try {
       // RESTORED PROFESSIONAL PATH
