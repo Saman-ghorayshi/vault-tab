@@ -4,13 +4,15 @@ import {
   saveTabGroups, 
   getSessionKey, 
   storeSessionKey 
-} from './storage.js';
+} from '../common/storage.js';
 import { 
   deriveKeyFromPassword, 
   decrypt, 
   encrypt,
   base64ToArrayBuffer 
-} from './crypto.js';
+} from '../common/crypto.js';
+
+// ... Keep the rest of your manager.js exactly the same! ...
 
 // Phases 2-4 States
 const SelectionState = { selectedTabs: new Set(), lastClickedIndex: -1, currentGroupId: null, focusedIndex: -1, allTabElements: [] };
