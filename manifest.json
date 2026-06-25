@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Aegis Tab",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Securely save and manage your tabs with zero-knowledge encryption.",
   "permissions": [
     "storage",
