@@ -316,6 +316,22 @@ function setup_paste_modal() {
     await save_urls_as_group(unique_urls, 'Pasted');
     close_paste_modal();
   });
+
+  // enter to save urls from the paste modal textarea
+  textarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      save_btn.click();
+    }
+  });
+
+  // escape to close modal
+  textarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      close_paste_modal();
+    }
+  });
 }
 
 function open_paste_modal() {
