@@ -216,6 +216,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   // floating action panel buttons
   setup_action_panel();
 
+  // shortcuts guide modal: click outside or close button to dismiss
+  const shortcuts_modal = document.getElementById('shortcuts-modal');
+  const close_shortcuts_btn = document.getElementById('close-shortcuts-modal');
+  if (close_shortcuts_btn) {
+    close_shortcuts_btn.addEventListener('click', () => {
+      shortcuts_modal.classList.add('hidden');
+    });
+  }
+  if (shortcuts_modal) {
+    shortcuts_modal.addEventListener('click', (e) => {
+      if (e.target === shortcuts_modal) shortcuts_modal.classList.add('hidden');
+    });
+  }
+
   const session_key = await get_session_key();
   if (session_key) {
     render_page(session_key);
@@ -504,9 +518,21 @@ function setup_keyboard_shortcuts() {
       if (search_input) search_input.focus();
     }
 
-    // Escape: clear selection and hide panels
+    // ?: open the shortcuts guide modal
+    if (e.key === '?') {
+      e.preventDefault();
+      const modal = document.getElementById('shortcuts-modal');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    // Escape: clear selection and close any open modal
     if (e.key === 'Escape') {
-      clear_selection();
+      const shortcuts_modal = document.getElementById('shortcuts-modal');
+      if (shortcuts_modal && !shortcuts_modal.classList.contains('hidden')) {
+        shortcuts_modal.classList.add('hidden');
+      } else {
+        clear_selection();
+      }
     }
   });
 }

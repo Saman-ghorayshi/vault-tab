@@ -749,3 +749,47 @@ button:disabled {
   border-top: 2px solid var(--accent);
   background-color: var(--bg-tertiary);
 }
+
+/* shortcuts guide modal table */
+.shortcuts-modal-content {
+  max-width: 500px;
+}
+
+.shortcuts-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.shortcuts-table th {
+  text-align: left;
+  padding: 10px 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  border-bottom: 1px solid var(--bg-tertiary);
+}
+
+.shortcuts-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--bg-tertiary);
+  font-size: 14px;
+}
+
+.shortcuts-table td:first-child {
+  white-space: nowrap;
+}
+
+.shortcuts-table kbd {
+  background-color: var(--bg-tertiary);
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.shortcuts-tip {
+  margin-top: 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}

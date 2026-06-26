@@ -93,7 +93,37 @@
     <button id="action-clear-selection" class="action-panel-btn clear-btn">Clear</button>
   </div>
 
-  <!-- keyboard shortcuts help -->
+  <!-- keyboard shortcuts guide modal (press ? to open) -->
+  <div id="shortcuts-modal" class="modal hidden">
+    <div class="modal-content shortcuts-modal-content">
+      <div class="modal-header">
+        <h3>Keyboard Shortcuts</h3>
+        <button id="close-shortcuts-modal" class="modal-close">x</button>
+      </div>
+      <div class="modal-body">
+        <table class="shortcuts-table">
+          <thead>
+            <tr><th>Key</th><th>Action</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><kbd>J</kbd></td><td>Move focus down</td></tr>
+            <tr><td><kbd>K</kbd></td><td>Move focus up</td></tr>
+            <tr><td><kbd>Space</kbd> / <kbd>Enter</kbd></td><td>Toggle selection on focused tab</td></tr>
+            <tr><td><kbd>X</kbd></td><td>Select focused tab and move to next</td></tr>
+            <tr><td><kbd>O</kbd></td><td>Open selected tabs (or focused tab)</td></tr>
+            <tr><td><kbd>/</kbd></td><td>Focus the search bar</td></tr>
+            <tr><td><kbd>Del</kbd> / <kbd>Backspace</kbd></td><td>Delete selected tabs</td></tr>
+            <tr><td><kbd>Ctrl+A</kbd></td><td>Select all tabs in current group</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>Clear selection / close modal</td></tr>
+            <tr><td><kbd>?</kbd></td><td>Open this shortcuts guide</td></tr>
+          </tbody>
+        </table>
+        <p class="shortcuts-tip">You can also click tabs to select, Ctrl+Click to toggle, and Shift+Click for range select. Drag tabs to reorder them within a group.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- keyboard shortcuts help bar -->
   <div id="shortcuts-help" class="shortcuts-help">
     <span>Shortcuts: </span>
     <kbd>J/K</kbd> navigate |
@@ -103,7 +133,8 @@
     <kbd>/</kbd> search |
     <kbd>Del</kbd> delete |
     <kbd>Ctrl+A</kbd> select all |
-    <kbd>Esc</kbd> clear
+    <kbd>Esc</kbd> clear |
+    <kbd>?</kbd> help
   </div>
 
   <script type="module" src="manager.js"></script>
