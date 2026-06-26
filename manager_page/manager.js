@@ -30,7 +30,30 @@ const delete_state = {
   timer_interval: null
 };
 
-const settings = { always_private: false };
+const settings = { always_private: false, auto_lock_minutes: 0 };
+
+// auto-lock: tracks last activity time and locks if idle too long
+let auto_lock_timer = null;
+let last_activity_time = Date.now();
+
+function check_auto_lock() {
+  if (settings.auto_lock_minutes <= 0) return;
+  const ms = settings.auto_lock_minutes * 60 * 1000;
+  const idle = Date.now() - last_activity_time;
+  if (idle >= ms) {
+    clear_session_key().then(() => location.reload());
+  } else {
+    auto_lock_timer = setTimeout(check_auto_lock, ms - idle + 1000);
+  }
+}
+
+function reset_auto_lock_timer() {
+  last_activity_time = Date.now();
+  if (auto_lock_timer) clearTimeout(auto_lock_timer);
+  if (settings.auto_lock_minutes <= 0) return;
+  const ms = settings.auto_lock_minutes * 60 * 1000;
+  auto_lock_timer = setTimeout(check_auto_lock, ms);
+}
 
 // tracks the currently dragged tab element for drag-and-drop reordering
 const drag_state = {
@@ -75,6 +98,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     settings.always_private = e.target.checked;
     save_settings(settings);
   });
+
+  // auto-lock setting
+  const auto_lock_select = document.getElementById('auto-lock-select');
+  if (auto_lock_select) {
+    auto_lock_select.value = String(settings.auto_lock_minutes);
+    auto_lock_select.addEventListener('change', (e) => {
+      settings.auto_lock_minutes = parseInt(e.target.value, 10) || 0;
+      save_settings(settings);
+      if (settings.auto_lock_minutes > 0) {
+        reset_auto_lock_timer();
+      } else if (auto_lock_timer) {
+        clearTimeout(auto_lock_timer);
+      }
+    });
+  }
 
   document.getElementById('dismiss-warning')?.addEventListener('click', () => {
     document.getElementById('incognito-warning').classList.add('hidden');
@@ -191,6 +229,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   setup_paste_modal();
   paste_urls_button.addEventListener('click', open_paste_modal);
   setup_keyboard_shortcuts();
+
+  // auto-lock: track mouse and keyboard activity, reset timer on each event
+  if (settings.auto_lock_minutes > 0) {
+    document.addEventListener('mousemove', reset_auto_lock_timer, { passive: true });
+    document.addEventListener('keydown', reset_auto_lock_timer, { passive: true });
+    document.addEventListener('click', reset_auto_lock_timer, { passive: true });
+    reset_auto_lock_timer();
+  }
 
   // search filter
   if (search_input) {
@@ -341,6 +387,7 @@ async function load_settings() {
   try {
     const stored = await get_settings();
     settings.always_private = stored.always_private || false;
+    settings.auto_lock_minutes = stored.auto_lock_minutes || 0;
   } catch (error) {
     // use defaults
   }

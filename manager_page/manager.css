@@ -639,6 +639,29 @@ button:disabled {
   color: var(--text-primary);
 }
 
+.setting-select {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.setting-select select {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--bg-tertiary);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.setting-select select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 /* keyboard shortcuts help bar */
 .shortcuts-help {
   position: fixed;
