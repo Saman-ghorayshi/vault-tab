@@ -75,6 +75,92 @@ document.addEventListener('DOMContentLoaded', async () => {
     import_file.value = '';
   });
 
+  // export all saved groups as a single encrypted .aegis backup file
+  // the backup contains the raw encrypted groups and credentials salt
+  // so it can be restored on any machine without re-encrypting
+  const export_backup_button = document.getElementById('export-backup-button');
+  if (export_backup_button) {
+    export_backup_button.addEventListener('click', async () => {
+      try {
+        const groups = await get_tab_groups();
+        if (groups.length === 0) {
+          alert('No saved tabs to export.');
+          return;
+        }
+
+        // build the backup object with metadata
+        const backup_data = {
+          format: 'aegis-backup',
+          version: 1,
+          exported_at: new Date().toISOString(),
+          group_count: groups.length,
+          groups: groups
+        };
+
+        const json_string = JSON.stringify(backup_data, null, 2);
+        const blob = new Blob([json_string], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `aegis-backup-${new Date().toISOString().split('T')[0]}.aegis`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (error) {
+        alert(`Failed to export backup: ${error.message}`);
+      }
+    });
+  }
+
+  // import a .aegis backup file and merge groups into storage
+  const import_backup_button = document.getElementById('import-backup-button');
+  const import_backup_file = document.getElementById('import-backup-file');
+  if (import_backup_button && import_backup_file) {
+    import_backup_button.addEventListener('click', () => import_backup_file.click());
+
+    import_backup_file.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const backup_data = JSON.parse(text);
+
+        if (!backup_data.format || backup_data.format !== 'aegis-backup') {
+          alert('This is not a valid Aegis Tab backup file.');
+          import_backup_file.value = '';
+          return;
+        }
+
+        if (!backup_data.groups || !Array.isArray(backup_data.groups)) {
+          alert('Backup file is corrupted or missing group data.');
+          import_backup_file.value = '';
+          return;
+        }
+
+        // merge: load existing groups, then add backup groups
+        // avoid duplicates by checking group ids
+        const existing_groups = await get_tab_groups();
+        const existing_ids = new Set(existing_groups.map(g => g.id));
+        let added_count = 0;
+
+        for (const group of backup_data.groups) {
+          if (!existing_ids.has(group.id)) {
+            existing_groups.unshift(group);
+            added_count++;
+          }
+        }
+
+        await save_tab_groups(existing_groups);
+        alert(`Imported ${added_count} group(s) from backup.`);
+        location.reload();
+      } catch (error) {
+        alert(`Failed to import backup: ${error.message}`);
+      }
+      import_backup_file.value = '';
+    });
+  }
+
   setup_paste_modal();
   paste_urls_button.addEventListener('click', open_paste_modal);
   setup_keyboard_shortcuts();
