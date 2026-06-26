@@ -79,9 +79,12 @@
 
   <!-- undo toast -->
   <div id="undo-toast" class="undo-toast hidden">
-    <span id="toast-message">Deleted</span>
-    <button id="undo-button" class="undo-button">Undo</button>
-    <span id="toast-timer" class="toast-timer">(5s)</span>
+    <div class="undo-toast-content">
+      <span id="toast-message">Deleted</span>
+      <button id="undo-button" class="undo-button">Undo</button>
+      <span id="toast-timer" class="toast-timer">8s</span>
+    </div>
+    <div id="toast-progress" class="toast-progress-bar"></div>
   </div>
 
   <!-- floating action panel: appears when tabs are selected -->

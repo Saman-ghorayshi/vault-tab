@@ -693,7 +693,7 @@ function soft_delete_tab(tab_element, group_id, tab_index) {
     clearTimeout(delete_state.pending_deletions[existing_index].timeout_id);
     delete_state.pending_deletions.splice(existing_index, 1);
   }
-  deletion.timeout_id = setTimeout(() => commit_deletion(deletion), 5000);
+  deletion.timeout_id = setTimeout(() => commit_deletion(deletion), 8000);
   delete_state.pending_deletions.push(deletion);
   show_undo_toast();
 }
@@ -706,7 +706,7 @@ function soft_delete_group(group_element, group_id) {
     group_id: group_id,
     timeout_id: null
   };
-  deletion.timeout_id = setTimeout(() => commit_deletion(deletion), 5000);
+  deletion.timeout_id = setTimeout(() => commit_deletion(deletion), 8000);
   delete_state.pending_deletions.push(deletion);
   show_undo_toast();
 }
@@ -768,16 +768,39 @@ function show_undo_toast() {
   const undo_button = document.getElementById('undo-button');
   const timer_span = document.getElementById('toast-timer');
   const message_span = document.getElementById('toast-message');
+  const progress_bar = document.getElementById('toast-progress');
   const count = delete_state.pending_deletions.length;
-  message_span.textContent = count === 1 ? 'Deleted' : `${count} items deleted`;
+
+  // smart messaging: distinguish tabs vs groups vs mixed
+  let tab_count = 0;
+  let group_count = 0;
+  delete_state.pending_deletions.forEach(d => {
+    if (d.type === 'group') group_count++;
+    else tab_count++;
+  });
+
+  if (group_count > 0 && tab_count > 0) {
+    message_span.textContent = `${count} items deleted`;
+  } else if (group_count > 0) {
+    message_span.textContent = group_count === 1 ? 'Group deleted' : `${group_count} groups deleted`;
+  } else {
+    message_span.textContent = tab_count === 1 ? 'Tab deleted' : `${tab_count} tabs deleted`;
+  }
 
   toast.classList.remove('hidden');
   const new_undo_button = undo_button.cloneNode(true);
   undo_button.parentNode.replaceChild(new_undo_button, undo_button);
   new_undo_button.addEventListener('click', undo_all_deletions);
 
-  let seconds_left = 5;
-  timer_span.textContent = `(${seconds_left}s)`;
+  // restart the progress bar animation
+  if (progress_bar) {
+    progress_bar.style.animation = 'none';
+    void progress_bar.offsetWidth; // force reflow
+    progress_bar.style.animation = 'toast-progress 8s linear forwards';
+  }
+
+  let seconds_left = 8;
+  timer_span.textContent = `${seconds_left}s`;
   if (delete_state.timer_interval) clearInterval(delete_state.timer_interval);
   delete_state.timer_interval = setInterval(() => {
     seconds_left--;
@@ -785,7 +808,7 @@ function show_undo_toast() {
       clearInterval(delete_state.timer_interval);
       hide_undo_toast();
     } else {
-      timer_span.textContent = `(${seconds_left}s)`;
+      timer_span.textContent = `${seconds_left}s`;
     }
   }, 1000);
 }
