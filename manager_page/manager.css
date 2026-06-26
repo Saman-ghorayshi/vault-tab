@@ -613,3 +613,98 @@ button:disabled {
     width: 100%;
   }
 }
+
+/* floating action panel: shows when tabs are selected
+   slides in from the right edge so you never need to scroll
+   to find the delete or export buttons */
+.action-panel {
+  position: fixed;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: var(--bg-card);
+  border-radius: var(--border-radius) 0 0 var(--border-radius);
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.4);
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 999;
+  animation: slide-in-right 0.25s ease;
+  min-width: 140px;
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+}
+
+.action-panel.hidden {
+  display: none !important;
+}
+
+.action-panel-count {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--bg-tertiary);
+}
+
+.action-panel-btn {
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  text-align: center;
+}
+
+.open-btn {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.open-btn:hover {
+  background-color: var(--bg-secondary);
+}
+
+.delete-btn {
+  background-color: transparent;
+  color: var(--error);
+  border: 1px solid var(--error);
+}
+
+.delete-btn:hover {
+  background-color: var(--error);
+  color: white;
+}
+
+.export-btn {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.export-btn:hover {
+  background-color: var(--bg-secondary);
+}
+
+.clear-btn {
+  background-color: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--text-secondary);
+}
+
+.clear-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+}

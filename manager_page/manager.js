@@ -97,6 +97,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  // floating action panel buttons
+  setup_action_panel();
+
   const session_key = await get_session_key();
   if (session_key) {
     render_page(session_key);
@@ -229,6 +232,68 @@ async function save_urls_as_group(urls, prefix = 'Imported') {
   location.reload();
 }
 
+function setup_action_panel() {
+  const open_btn = document.getElementById('action-open-selected');
+  const delete_btn = document.getElementById('action-delete-selected');
+  const export_btn = document.getElementById('action-export-selected');
+  const clear_btn = document.getElementById('action-clear-selection');
+
+  if (clear_btn) {
+    clear_btn.addEventListener('click', clear_selection);
+  }
+
+  if (delete_btn) {
+    delete_btn.addEventListener('click', () => {
+      delete_selected_items();
+      update_action_panel();
+    });
+  }
+
+  // open selected tabs in a new window
+  if (open_btn) {
+    open_btn.addEventListener('click', async () => {
+      const selected = get_selected_tab_elements();
+      const urls = [];
+      selected.forEach(el => {
+        const link = el.querySelector('.tab-link');
+        if (link) {
+          const href = link.getAttribute('href');
+          if (href) urls.push(href);
+        }
+      });
+      if (urls.length > 0) {
+        await restore_tabs_batched(urls, settings.always_private);
+      }
+    });
+  }
+
+  // export selected tabs as a text file
+  if (export_btn) {
+    export_btn.addEventListener('click', () => {
+      const selected = get_selected_tab_elements();
+      const urls = [];
+      selected.forEach(el => {
+        const link = el.querySelector('.tab-link');
+        if (link) {
+          const href = link.getAttribute('href');
+          if (href) urls.push(href);
+        }
+      });
+      if (urls.length === 0) return;
+      const urls_text = urls.join('\n');
+      const blob = new Blob([urls_text], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `aegis-selected-${new Date().toISOString().split('T')[0]}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+  }
+}
+
 function setup_keyboard_shortcuts() {
   window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -311,6 +376,27 @@ function clear_selection() {
   selection_state.selected_tabs.forEach(tab => tab.classList.remove('selected'));
   selection_state.selected_tabs.clear();
   selection_state.last_clicked_index = -1;
+  update_action_panel();
+}
+
+// update the floating action panel visibility and count
+function update_action_panel() {
+  const panel = document.getElementById('action-panel');
+  const count_span = document.getElementById('action-panel-count');
+  if (!panel || !count_span) return;
+
+  const count = selection_state.selected_tabs.size;
+  if (count > 0) {
+    count_span.textContent = count === 1 ? '1 selected' : `${count} selected`;
+    panel.classList.remove('hidden');
+  } else {
+    panel.classList.add('hidden');
+  }
+}
+
+// get the selected tab elements as an array in dom order
+function get_selected_tab_elements() {
+  return selection_state.all_tab_elements.filter(el => selection_state.selected_tabs.has(el));
 }
 
 function handle_tab_click(e, tab_element, tab_index, group_id) {
@@ -344,6 +430,7 @@ function handle_tab_click(e, tab_element, tab_index, group_id) {
     tab_element.classList.add('selected');
   }
   selection_state.last_clicked_index = global_index;
+  update_action_panel();
 }
 
 function soft_delete_tab(tab_element, group_id, tab_index) {
