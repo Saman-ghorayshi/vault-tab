@@ -210,6 +210,105 @@ button:disabled {
   text-decoration: underline;
 }
 
+/* neural network analytics panel */
+.analytics-panel {
+  background-color: var(--bg-card);
+  border-radius: var(--border-radius);
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.analytics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.analytics-header h3 {
+  margin: 0;
+}
+
+.analytics-stats {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.model-status {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.model-status.trained {
+  color: var(--success);
+}
+
+.stat-chip {
+  background-color: var(--bg-secondary);
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* loss chart: a row of vertical bars showing loss decrease over epochs */
+.loss-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 60px;
+  padding: 8px 0;
+  border-top: 1px solid var(--bg-tertiary);
+  overflow-x: auto;
+}
+
+.loss-bar {
+  flex: 0 0 8px;
+  min-height: 2px;
+  background-color: var(--accent);
+  border-radius: 2px 2px 0 0;
+  opacity: 0.8;
+  transition: height 0.3s ease;
+}
+
+.loss-chart-empty {
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 20px 0;
+  text-align: center;
+  width: 100%;
+}
+
+/* semantic search toggle */
+.search-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.search-mode-toggle input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* cluster badge on tab items */
+.cluster-badge {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
 .error-message {
   color: var(--error);
   font-size: 14px;

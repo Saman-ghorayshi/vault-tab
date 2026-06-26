@@ -21,6 +21,10 @@
       </div>
       <div class="header-actions">
         <input type="text" id="search-input" class="search-input" placeholder="Search tabs..." />
+        <label class="search-mode-toggle" title="Use neural network semantic search">
+          <input type="checkbox" id="semantic-search-toggle" />
+          <span>Semantic</span>
+        </label>
         <input type="file" id="import-file" accept=".txt" style="display: none;">
         <input type="file" id="import-backup-file" accept=".aegis" style="display: none;">
         <button id="import-button" class="secondary-button">Import URLs</button>
@@ -71,6 +75,21 @@
         <div id="manager-error" class="error-message hidden"></div>
         <button id="manager-unlock-button" class="primary-button">Unlock</button>
       </div>
+    </div>
+
+    <!-- neural network analytics panel -->
+    <div id="analytics-panel" class="analytics-panel hidden">
+      <div class="analytics-header">
+        <h3>Neural Embedding Engine</h3>
+        <button id="train-model-button" class="secondary-button">Train Model</button>
+      </div>
+      <div class="analytics-stats">
+        <span id="model-status" class="model-status">Not trained</span>
+        <span id="vocab-size-display" class="stat-chip">Vocab: 0</span>
+        <span id="loss-display" class="stat-chip">Loss: --</span>
+        <span id="epoch-display" class="stat-chip">Epoch: 0/0</span>
+      </div>
+      <div id="loss-chart" class="loss-chart"></div>
     </div>
 
     <div id="groups-container" class="groups-container hidden">

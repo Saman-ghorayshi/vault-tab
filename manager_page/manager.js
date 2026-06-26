@@ -9,11 +9,15 @@ import {
   derive_key_from_password, decrypt, encrypt,
   base64_to_array_buffer
 } from '../common/crypto.js';
+import { LocalTabEmbedder, calculate_cosine_similarity, kmeans_cluster } from '../common/embedder.js';
 
 const VERIFIER_STRING = 'aegis-verification-string';
 
 // the username that is currently unlocked in this session
 let active_username = null;
+
+// neural network embedder instance for semantic search and clustering
+const embedder = new LocalTabEmbedder();
 
 // state objects
 const selection_state = {
@@ -238,9 +242,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     reset_auto_lock_timer();
   }
 
-  // search filter
+  // neural network training button
+  const train_model_button = document.getElementById('train-model-button');
+  if (train_model_button) {
+    train_model_button.addEventListener('click', () => start_neural_training());
+  }
+
+  // search filter (supports semantic mode)
   if (search_input) {
-    search_input.addEventListener('input', filter_tabs_by_search);
+    search_input.addEventListener('input', () => {
+      const semantic_toggle = document.getElementById('semantic-search-toggle');
+      if (semantic_toggle && semantic_toggle.checked && embedder.is_trained) {
+        semantic_search_tabs(search_input.value);
+      } else {
+        filter_tabs_by_search();
+      }
+    });
   }
 
   // lock button: clear session key, hide everything, show password prompt
@@ -257,6 +274,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.querySelector('header')?.classList.add('hidden');
       document.getElementById('shortcuts-help')?.classList.add('hidden');
       document.getElementById('action-panel')?.classList.add('hidden');
+      document.getElementById('analytics-panel')?.classList.add('hidden');
 
       // show password prompt
       loading_message.classList.add('hidden');
@@ -288,6 +306,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     active_username = session_user;
     const user_label = document.getElementById('current-user-display');
     if (user_label) user_label.textContent = session_user;
+    document.getElementById('analytics-panel')?.classList.remove('hidden');
     render_page(session_key);
   } else {
     // locked on initial load: hide everything except the password prompt
@@ -356,6 +375,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           document.querySelector('header')?.classList.remove('hidden');
           document.getElementById('settings-panel')?.classList.remove('hidden');
           document.getElementById('shortcuts-help')?.classList.remove('hidden');
+          document.getElementById('analytics-panel')?.classList.remove('hidden');
           const user_label = document.getElementById('current-user-display');
           if (user_label) user_label.textContent = username;
           render_page(key);
@@ -1240,4 +1260,210 @@ async function rename_session(group_id, new_name, title_el) {
   } catch (error) {
     alert('Failed to rename session.');
   }
+}
+
+// --- neural network training and analytics ---
+
+// start training the embedding model on all decrypted tab data
+async function start_neural_training() {
+  const train_button = document.getElementById('train-model-button');
+  const status_el = document.getElementById('model-status');
+  const vocab_display = document.getElementById('vocab-size-display');
+  const loss_display = document.getElementById('loss-display');
+  const epoch_display = document.getElementById('epoch-display');
+  const loss_chart = document.getElementById('loss-chart');
+
+  if (train_button) {
+    train_button.disabled = true;
+    train_button.textContent = 'Training...';
+  }
+  if (status_el) {
+    status_el.textContent = 'Training in progress...';
+    status_el.classList.remove('trained');
+  }
+  if (loss_chart) {
+    loss_chart.innerHTML = '<div class="loss-chart-empty">Training...</div>';
+  }
+
+  try {
+    // decrypt all groups to get raw tab data for training
+    const session_key = await get_session_key();
+    if (!session_key) return;
+
+    const encrypted_groups = await get_tab_groups(active_username);
+    const decrypted_groups = [];
+
+    for (const group of encrypted_groups) {
+      try {
+        const data = JSON.parse(await decrypt(group, session_key));
+        decrypted_groups.push(data);
+      } catch (e) {
+        // skip groups that fail to decrypt
+      }
+    }
+
+    if (decrypted_groups.length === 0) {
+      if (status_el) status_el.textContent = 'No tab data to train on';
+      if (train_button) { train_button.disabled = false; train_button.textContent = 'Train Model'; }
+      return;
+    }
+
+    // build the training dataset
+    const dataset = embedder.create_training_dataset(decrypted_groups);
+
+    if (dataset.length === 0) {
+      if (status_el) status_el.textContent = 'No tokens found in tab data';
+      if (train_button) { train_button.disabled = false; train_button.textContent = 'Train Model'; }
+      return;
+    }
+
+    if (vocab_display) vocab_display.textContent = `Vocab: ${embedder.vocab_size}`;
+
+    // run training with chunked execution
+    const epochs = 20;
+    const learning_rate = 0.05;
+
+    embedder.train_epochs(dataset, epochs, learning_rate,
+      (progress) => {
+        if (loss_display) loss_display.textContent = `Loss: ${progress.loss.toFixed(4)}`;
+        if (epoch_display) epoch_display.textContent = `Epoch: ${progress.epoch}/${progress.total_epochs}`;
+        update_loss_chart(loss_chart, embedder.loss_history);
+      },
+      () => {
+        // training complete
+        if (status_el) {
+          status_el.textContent = 'Trained';
+          status_el.classList.add('trained');
+        }
+        if (train_button) {
+          train_button.disabled = false;
+          train_button.textContent = 'Retrain';
+        }
+        update_loss_chart(loss_chart, embedder.loss_history);
+
+        // apply clustering to the rendered tabs
+        apply_clustering_to_tabs(decrypted_groups);
+      }
+    );
+  } catch (error) {
+    if (status_el) status_el.textContent = `Error: ${error.message}`;
+    if (train_button) { train_button.disabled = false; train_button.textContent = 'Train Model'; }
+  }
+}
+
+// render the loss chart as a row of vertical bars
+function update_loss_chart(chart_el, loss_history) {
+  if (!chart_el || !loss_history || loss_history.length === 0) return;
+
+  chart_el.innerHTML = '';
+  const max_loss = Math.max(...loss_history);
+  const min_loss = Math.min(...loss_history);
+  const range = max_loss - min_loss || 1;
+
+  for (let i = 0; i < loss_history.length; i++) {
+    const bar = document.createElement('div');
+    bar.className = 'loss-bar';
+    // normalize to 0-100% height relative to the loss range
+    const normalized = (loss_history[i] - min_loss) / range;
+    const height_pct = Math.max(5, 100 - (normalized * 90));
+    bar.style.height = `${height_pct}%`;
+    bar.title = `Epoch ${i + 1}: ${loss_history[i].toFixed(4)}`;
+    chart_el.appendChild(bar);
+  }
+}
+
+// compute embeddings for all tabs and apply k-means clustering
+// adds a colored cluster badge to each tab item in the dom
+function apply_clustering_to_tabs(decrypted_groups) {
+  // collect all tab elements and their text
+  const tab_elements = [...document.querySelectorAll('.tab-item')];
+  const tab_texts = [];
+  const tab_el_map = [];
+
+  tab_elements.forEach((el, i) => {
+    const link = el.querySelector('.tab-link');
+    if (link) {
+      const text = link.textContent + ' ' + (link.getAttribute('href') || '');
+      tab_texts.push(text);
+      tab_el_map.push(el);
+    }
+  });
+
+  if (tab_texts.length < 2) return;
+
+  // embed each tab text
+  const embeddings = tab_texts.map(text => embedder.embed_text(text));
+
+  // run k-means with k = min(5, number of tabs)
+  const k = Math.min(5, tab_texts.length);
+  const assignments = kmeans_cluster(embeddings, k, 30);
+
+  // cluster colors
+  const cluster_colors = ['#e94560', '#4caf50', '#2196f3', '#ff9800', '#9c27b0'];
+
+  // add cluster badge to each tab
+  tab_el_map.forEach((el, i) => {
+    // remove old badge if present
+    const old_badge = el.querySelector('.cluster-badge');
+    if (old_badge) old_badge.remove();
+
+    const badge = document.createElement('span');
+    badge.className = 'cluster-badge';
+    badge.style.backgroundColor = cluster_colors[assignments[i] % cluster_colors.length];
+    badge.title = `Cluster ${assignments[i] + 1}`;
+    el.insertBefore(badge, el.firstChild);
+  });
+}
+
+// semantic search: rank tabs by cosine similarity to the query
+// uses the trained embedding model instead of simple text matching
+function semantic_search_tabs(query) {
+  if (!embedder.is_trained || !query.trim()) {
+    // fall back to regular search if model is not trained
+    filter_tabs_by_search();
+    return;
+  }
+
+  const query_embedding = embedder.embed_text(query);
+  const tab_elements = document.querySelectorAll('.tab-item');
+
+  // collect tab data and compute similarities
+  const tab_scores = [];
+  tab_elements.forEach((el, i) => {
+    const link = el.querySelector('.tab-link');
+    if (!link) return;
+    const text = link.textContent + ' ' + (link.getAttribute('href') || '');
+    const tab_embedding = embedder.embed_text(text);
+    const similarity = calculate_cosine_similarity(query_embedding, tab_embedding);
+    tab_scores.push({ element: el, score: similarity });
+  });
+
+  // sort all tabs by similarity score descending
+  tab_scores.sort((a, b) => b.score - a.score);
+
+  // reorder the dom: move higher-scoring tabs to the top of their groups
+  const groups_seen = new Set();
+  tab_scores.forEach(item => {
+    const group_card = item.element.closest('.group-card');
+    if (group_card && !groups_seen.has(group_card)) {
+      groups_seen.add(group_card);
+      // move the group card to the top of the container
+      const container = group_card.parentElement;
+      container.insertBefore(group_card, container.firstChild);
+    }
+    // move the tab to the top of its group
+    const tabs_list = item.element.parentElement;
+    if (tabs_list) {
+      tabs_list.insertBefore(item.element, tabs_list.firstChild);
+    }
+    // show all tabs (semantic search shows all, just reordered)
+    item.element.style.display = '';
+    // highlight score on hover via title
+    item.element.title = `Similarity: ${(item.score * 100).toFixed(1)}%`;
+  });
+
+  // show all group cards
+  document.querySelectorAll('.group-card').forEach(card => {
+    card.style.display = '';
+  });
 }
