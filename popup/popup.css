@@ -139,6 +139,30 @@ button:disabled {
   display: none !important;
 }
 
+/* username select dropdown */
+.username-select {
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--bg-tertiary);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: var(--transition);
+  cursor: pointer;
+}
+
+.username-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* current user label */
+.user-label {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 /* password field with eye toggle */
 .password-wrapper {
   position: relative;

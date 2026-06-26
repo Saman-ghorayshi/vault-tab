@@ -10,8 +10,13 @@
   <div id="locked-view">
     <div class="container">
       <h1>Aegis Tab</h1>
+
+      <!-- setup view: first time creating a user -->
       <div id="setup-view" class="hidden">
-        <h2>Create Master Password</h2>
+        <h2>Create Account</h2>
+        <div class="form-group">
+          <input type="text" id="setup-username" placeholder="Username" />
+        </div>
         <div class="form-group">
           <div class="password-wrapper">
             <input type="password" id="setup-password" placeholder="Enter password" />
@@ -27,10 +32,17 @@
           </div>
         </div>
         <div id="setup-error" class="error-message hidden"></div>
-        <button id="setup-button" class="primary-button">Create Password</button>
+        <button id="setup-button" class="primary-button">Create Account</button>
       </div>
+
+      <!-- unlock view: returning user -->
       <div id="unlock-view" class="hidden">
         <h2>Unlock Aegis Tab</h2>
+        <div id="unlock-username-wrapper" class="form-group hidden">
+          <select id="unlock-username-select" class="username-select">
+            <option value="">Select user...</option>
+          </select>
+        </div>
         <div class="form-group">
           <div class="password-wrapper">
             <input type="password" id="unlock-password" placeholder="Enter password" />
@@ -43,10 +55,11 @@
     </div>
   </div>
 
+  <!-- unlocked view -->
   <div id="unlocked-view" class="hidden">
     <div class="container">
       <h1>Aegis Tab</h1>
-      <p>Your tabs are secured</p>
+      <p>Signed in as <span id="current-user-label" class="user-label"></span></p>
       <div class="button-group">
         <button id="save-tabs-button" class="primary-button">Save All Tabs</button>
         <button id="save-current-tab-button" class="secondary-button">Save This Tab</button>
