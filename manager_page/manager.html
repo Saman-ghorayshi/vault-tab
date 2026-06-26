@@ -15,7 +15,10 @@
     </div>
 
     <header>
-      <h1>Aegis Tab Manager</h1>
+      <div class="header-title">
+        <h1>Aegis Tab Manager</h1>
+        <span id="current-user-display" class="current-user-display"></span>
+      </div>
       <div class="header-actions">
         <input type="text" id="search-input" class="search-input" placeholder="Search tabs..." />
         <input type="file" id="import-file" accept=".txt" style="display: none;">
@@ -43,6 +46,11 @@
     <div id="password-prompt-view" class="hidden">
       <div class="card">
         <h2>Unlock Aegis Tab</h2>
+        <div id="manager-username-wrapper" class="form-group hidden">
+          <select id="manager-username-select" class="username-select">
+            <option value="">Select user...</option>
+          </select>
+        </div>
         <div class="form-group">
           <div class="password-wrapper">
             <input type="password" id="manager-password" placeholder="Enter password" />

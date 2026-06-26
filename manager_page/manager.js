@@ -1,6 +1,8 @@
 import {
-  get_credentials, get_tab_groups, save_tab_groups,
+  get_all_users, get_user_by_username, save_user,
+  get_tab_groups, save_tab_groups,
   get_session_key, store_session_key, clear_session_key,
+  get_session_user, set_session_user,
   get_settings, save_settings
 } from '../common/storage.js';
 import {
@@ -9,6 +11,9 @@ import {
 } from '../common/crypto.js';
 
 const VERIFIER_STRING = 'aegis-verification-string';
+
+// the username that is currently unlocked in this session
+let active_username = null;
 
 // state objects
 const selection_state = {
@@ -103,7 +108,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (export_backup_button) {
     export_backup_button.addEventListener('click', async () => {
       try {
-        const groups = await get_tab_groups();
+        const groups = await get_tab_groups(active_username);
         if (groups.length === 0) {
           alert('No saved tabs to export.');
           return;
@@ -114,6 +119,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           format: 'aegis-backup',
           version: 1,
           exported_at: new Date().toISOString(),
+          exported_by: active_username,
           group_count: groups.length,
           groups: groups
         };
@@ -161,7 +167,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // merge: load existing groups, then add backup groups
         // avoid duplicates by checking group ids
-        const existing_groups = await get_tab_groups();
+        const existing_groups = await get_tab_groups(active_username);
         const existing_ids = new Set(existing_groups.map(g => g.id));
         let added_count = 0;
 
@@ -172,7 +178,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           }
         }
 
-        await save_tab_groups(existing_groups);
+        await save_tab_groups(active_username, existing_groups);
         alert(`Imported ${added_count} group(s) from backup.`);
         location.reload();
       } catch (error) {
@@ -231,7 +237,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   const session_key = await get_session_key();
-  if (session_key) {
+  const session_user = await get_session_user();
+  if (session_key && session_user) {
+    active_username = session_user;
+    const user_label = document.getElementById('current-user-display');
+    if (user_label) user_label.textContent = session_user;
     render_page(session_key);
   } else {
     // locked on initial load: hide everything except the password prompt
@@ -240,6 +250,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.querySelector('header')?.classList.add('hidden');
     document.getElementById('shortcuts-help')?.classList.add('hidden');
     password_prompt_view.classList.remove('hidden');
+
+    // populate user dropdown for multi-user
+    const all_users = await get_all_users();
+    const manager_username_select = document.getElementById('manager-username-select');
+    const manager_username_wrapper = document.getElementById('manager-username-wrapper');
+    if (all_users.length > 1 && manager_username_select) {
+      manager_username_wrapper?.classList.remove('hidden');
+      all_users.forEach(u => {
+        const option = document.createElement('option');
+        option.value = u.username;
+        option.textContent = u.username;
+        manager_username_select.appendChild(option);
+      });
+    } else if (all_users.length === 1 && manager_username_select) {
+      manager_username_select.value = all_users[0].username;
+    }
+
     setTimeout(() => manager_password.focus(), 100);
 
     manager_password.addEventListener('keypress', (e) => {
@@ -248,9 +275,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     manager_unlock_button.addEventListener('click', async () => {
       const password = manager_password.value;
+      const username = all_users.length === 1
+        ? all_users[0].username
+        : manager_username_select?.value;
       manager_error.classList.add('hidden');
       if (!password) {
         manager_error.textContent = 'Please enter your password';
+        manager_error.classList.remove('hidden');
+        return;
+      }
+      if (!username) {
+        manager_error.textContent = 'Please select a user';
         manager_error.classList.remove('hidden');
         return;
       }
@@ -259,20 +294,24 @@ document.addEventListener('DOMContentLoaded', async () => {
       manager_unlock_button.textContent = 'Unlocking...';
 
       try {
-        const credentials = await get_credentials();
-        if (!credentials) throw new Error('No credentials');
+        const user = await get_user_by_username(username);
+        if (!user) throw new Error('User not found');
 
-        const salt = base64_to_array_buffer(credentials.password_salt);
+        const salt = base64_to_array_buffer(user.password_salt);
         const key = await derive_key_from_password(password, salt);
-        const decrypted_verifier = await decrypt(credentials.password_verifier, key);
+        const decrypted_verifier = await decrypt(user.password_verifier, key);
 
         if (decrypted_verifier === VERIFIER_STRING) {
           await store_session_key(key);
+          await set_session_user(username);
+          active_username = username;
           password_prompt_view.classList.add('hidden');
           // restore hidden ui elements after unlock
           document.querySelector('header')?.classList.remove('hidden');
           document.getElementById('settings-panel')?.classList.remove('hidden');
           document.getElementById('shortcuts-help')?.classList.remove('hidden');
+          const user_label = document.getElementById('current-user-display');
+          if (user_label) user_label.textContent = username;
           render_page(key);
         } else {
           throw new Error('Decryption failed');
@@ -380,9 +419,9 @@ async function save_urls_as_group(urls, prefix = 'Imported') {
     iv: encrypted.iv,
     ciphertext: encrypted.ciphertext
   };
-  const groups = await get_tab_groups();
+  const groups = await get_tab_groups(active_username);
   groups.unshift(new_group);
-  await save_tab_groups(groups);
+  await save_tab_groups(active_username, groups);
   location.reload();
 }
 
@@ -713,12 +752,12 @@ function soft_delete_group(group_element, group_id) {
 
 async function commit_deletion(deletion) {
   try {
-    const groups = await get_tab_groups();
+    const groups = await get_tab_groups(active_username);
     const session_key = await get_session_key();
 
     if (deletion.type === 'group') {
       const updated_groups = groups.filter(g => g.id !== deletion.group_id);
-      await save_tab_groups(updated_groups);
+      await save_tab_groups(active_username, updated_groups);
       deletion.element.remove();
       if (updated_groups.length === 0) {
         document.getElementById('groups-container').innerHTML =
@@ -741,7 +780,7 @@ async function commit_deletion(deletion) {
           };
           deletion.element.remove();
         }
-        await save_tab_groups(groups);
+        await save_tab_groups(active_username, groups);
       }
     }
 
@@ -868,7 +907,7 @@ async function render_page(key) {
   try {
     groups_container.innerHTML = '';
     selection_state.all_tab_elements = [];
-    const encrypted_groups = await get_tab_groups();
+    const encrypted_groups = await get_tab_groups(active_username);
 
     if (encrypted_groups.length === 0) {
       groups_container.innerHTML = '<div class="empty-state"><p>No saved tabs found.</p></div>';
@@ -915,8 +954,9 @@ function create_group_element(group_id, group_data, group_index = 0) {
 
   const header = document.createElement('div');
   header.className = 'group-header';
+  const display_name = group_data.name || `Saved on ${formatted_date}`;
   header.innerHTML = `
-    <h3>Saved on ${formatted_date} (${group_data.tabs.length} tabs)</h3>
+    <h3 class="group-title" title="Double-click to rename">${display_name} (${group_data.tabs.length} tabs)</h3>
     <div class="group-actions">
       <button class="restore-button secondary-button">Restore All</button>
       <button class="restore-private-button private-restore-button">Private</button>
@@ -924,6 +964,15 @@ function create_group_element(group_id, group_data, group_index = 0) {
       <button class="delete-button">Delete</button>
     </div>
   `;
+
+  // double-click the title to rename the session
+  const title_el = header.querySelector('.group-title');
+  title_el.addEventListener('dblclick', () => {
+    const new_name = prompt('Rename this session:', display_name);
+    if (new_name && new_name.trim()) {
+      rename_session(group_id, new_name.trim(), title_el);
+    }
+  });
 
   const tabs_list = document.createElement('div');
   tabs_list.className = 'tabs-list';
@@ -1075,7 +1124,7 @@ async function persist_tab_reorder(group_id, tabs_list_element) {
     const session_key = await get_session_key();
     if (!session_key) return;
 
-    const groups = await get_tab_groups();
+    const groups = await get_tab_groups(active_username);
     const group_index = groups.findIndex(g => g.id === group_id);
     if (group_index === -1) return;
 
@@ -1103,7 +1152,7 @@ async function persist_tab_reorder(group_id, tabs_list_element) {
       iv: encrypted.iv,
       ciphertext: encrypted.ciphertext
     };
-    await save_tab_groups(groups);
+    await save_tab_groups(active_username, groups);
 
     // update the tabIndex attributes to reflect the new order
     tab_elements.forEach((el, i) => {
@@ -1115,5 +1164,33 @@ async function persist_tab_reorder(group_id, tabs_list_element) {
   } catch (error) {
     // reorder failed to persist, but the dom is already updated
     // a page reload will revert to the stored order
+  }
+}
+
+// rename a saved session by updating the name field in the encrypted group data
+async function rename_session(group_id, new_name, title_el) {
+  try {
+    const session_key = await get_session_key();
+    if (!session_key) return;
+
+    const groups = await get_tab_groups(active_username);
+    const group_index = groups.findIndex(g => g.id === group_id);
+    if (group_index === -1) return;
+
+    const group_data = JSON.parse(await decrypt(groups[group_index], session_key));
+    group_data.name = new_name;
+    const encrypted = await encrypt(JSON.stringify(group_data), session_key);
+    groups[group_index] = {
+      id: group_id,
+      iv: encrypted.iv,
+      ciphertext: encrypted.ciphertext
+    };
+    await save_tab_groups(active_username, groups);
+
+    // update the title in the dom without reloading
+    const tab_count = group_data.tabs.length;
+    title_el.textContent = `${new_name} (${tab_count} tabs)`;
+  } catch (error) {
+    alert('Failed to rename session.');
   }
 }

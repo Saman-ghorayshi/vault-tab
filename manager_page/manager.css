@@ -169,6 +169,47 @@ button:disabled {
   font-size: 14px;
 }
 
+/* current user display in header */
+.header-title {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.current-user-display {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* username select dropdown (shared style) */
+.username-select {
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--bg-tertiary);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: var(--transition);
+  cursor: pointer;
+}
+
+.username-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* group title (renameable) */
+.group-title {
+  cursor: pointer;
+  user-select: none;
+}
+
+.group-title:hover {
+  text-decoration: underline;
+}
+
 .error-message {
   color: var(--error);
   font-size: 14px;
