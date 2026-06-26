@@ -27,6 +27,12 @@ const delete_state = {
 
 const settings = { always_private: false };
 
+// tracks the currently dragged tab element for drag-and-drop reordering
+const drag_state = {
+  dragged_element: null,
+  dragged_group_id: null
+};
+
 document.addEventListener('DOMContentLoaded', async () => {
   const loading_message = document.getElementById('loading-message');
   const password_prompt_view = document.getElementById('password-prompt-view');
@@ -830,6 +836,7 @@ function create_group_element(group_id, group_data, group_index = 0) {
     tab_element.className = 'tab-item';
     tab_element.dataset.groupId = group_id;
     tab_element.dataset.tabIndex = tab_index;
+    tab_element.draggable = true;
 
     const favicon = tab.fav_icon_url
       ? `<img src="${tab.fav_icon_url}" alt="favicon" class="favicon" onerror="this.style.display='none'">`
@@ -843,6 +850,61 @@ function create_group_element(group_id, group_data, group_index = 0) {
       e.preventDefault();
       e.stopPropagation();
       soft_delete_tab(tab_element, group_id, tab_index);
+    });
+
+    // drag-and-drop reordering within the same group
+    // stores a reference to the dragged element, then on drop reorders
+    // the dom and persists the new order to encrypted storage
+    tab_element.addEventListener('dragstart', (e) => {
+      tab_element.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', group_id);
+      drag_state.dragged_element = tab_element;
+      drag_state.dragged_group_id = group_id;
+    });
+
+    tab_element.addEventListener('dragend', () => {
+      tab_element.classList.remove('dragging');
+      drag_state.dragged_element = null;
+      drag_state.dragged_group_id = null;
+      // clear visual markers on all tabs
+      document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('drag-over'));
+    });
+
+    tab_element.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (drag_state.dragged_element && drag_state.dragged_group_id === group_id) {
+        tab_element.classList.add('drag-over');
+      }
+    });
+
+    tab_element.addEventListener('dragleave', () => {
+      tab_element.classList.remove('drag-over');
+    });
+
+    tab_element.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      tab_element.classList.remove('drag-over');
+      if (!drag_state.dragged_element || drag_state.dragged_group_id !== group_id) return;
+      if (drag_state.dragged_element === tab_element) return;
+
+      // reorder in the dom first for immediate visual feedback
+      const tabs_list_el = tab_element.parentElement;
+      const dragged = drag_state.dragged_element;
+      const all_items = [...tabs_list_el.querySelectorAll('.tab-item')];
+      const from_index = all_items.indexOf(dragged);
+      const to_index = all_items.indexOf(tab_element);
+
+      if (from_index < to_index) {
+        tabs_list_el.insertBefore(dragged, tab_element.nextSibling);
+      } else {
+        tabs_list_el.insertBefore(dragged, tab_element);
+      }
+
+      // persist the new order to storage
+      persist_tab_reorder(group_id, tabs_list_el);
     });
 
     tabs_list.appendChild(tab_element);
@@ -906,4 +968,55 @@ function filter_tabs_by_search() {
     const visible_tabs = card.querySelectorAll('.tab-item:not([style*="display: none"])');
     card.style.display = visible_tabs.length > 0 ? '' : 'none';
   });
+}
+
+// persist the new tab order after a drag-and-drop reorder
+// reads the current dom order of tab elements, maps them back to tab data,
+// re-encrypts, and saves. this is async and does not reload the page.
+async function persist_tab_reorder(group_id, tabs_list_element) {
+  try {
+    const session_key = await get_session_key();
+    if (!session_key) return;
+
+    const groups = await get_tab_groups();
+    const group_index = groups.findIndex(g => g.id === group_id);
+    if (group_index === -1) return;
+
+    const group_data = JSON.parse(await decrypt(groups[group_index], session_key));
+    const tab_elements = tabs_list_element.querySelectorAll('.tab-item');
+    const reordered_tabs = [];
+
+    // read the links from each dom element in the new order
+    // and match them back to the original tab data by url
+    tab_elements.forEach(el => {
+      const link = el.querySelector('.tab-link');
+      if (link) {
+        const url = link.getAttribute('href');
+        const match = group_data.tabs.find(t => t.url === url);
+        if (match) reordered_tabs.push(match);
+      }
+    });
+
+    if (reordered_tabs.length !== group_data.tabs.length) return;
+
+    group_data.tabs = reordered_tabs;
+    const encrypted = await encrypt(JSON.stringify(group_data), session_key);
+    groups[group_index] = {
+      id: group_id,
+      iv: encrypted.iv,
+      ciphertext: encrypted.ciphertext
+    };
+    await save_tab_groups(groups);
+
+    // update the tabIndex attributes to reflect the new order
+    tab_elements.forEach((el, i) => {
+      el.dataset.tabIndex = i;
+    });
+
+    // rebuild the all_tab_elements array for keyboard navigation
+    selection_state.all_tab_elements = [...document.querySelectorAll('.tab-item')];
+  } catch (error) {
+    // reorder failed to persist, but the dom is already updated
+    // a page reload will revert to the stored order
+  }
 }

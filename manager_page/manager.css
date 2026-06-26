@@ -708,3 +708,14 @@ button:disabled {
   color: var(--text-primary);
   border-color: var(--text-primary);
 }
+
+/* drag-and-drop reordering visual states */
+.tab-item.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+
+.tab-item.drag-over {
+  border-top: 2px solid var(--accent);
+  background-color: var(--bg-tertiary);
+}
