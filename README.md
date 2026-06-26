@@ -24,6 +24,7 @@ Your tab data is encrypted with a master password that never leaves your device.
 - **Export URLs** - Export any session's URLs as a plain text file.
 - **Undo with progress bar** - Soft-delete with an 8-second undo window. Visual progress bar and smart messaging.
 - **Dark theme** - Clean dark UI with staggered animations.
+- **Neural embedding engine** - A from-scratch neural network (Word2Vec Skip-gram) that learns custom embeddings on your decrypted tab data. Provides semantic search, K-Means clustering, and a live training analytics panel with loss visualization. Automatically fine-tunes when you save new tabs.
 - **Manifest V3** - Built for the latest Chrome extension platform.
 
 ## Installation
@@ -76,6 +77,13 @@ Your tab data is encrypted with a master password that never leaves your device.
 
 Press **?** on the manager page to see the full guide as an overlay.
 
+### Neural Embedding Engine
+- Click **Train Model** in the analytics panel to train the network on your tab data
+- Watch the loss chart decrease in real time as the model converges
+- Toggle **Semantic** next to the search bar for meaning-based search instead of text matching
+- After training, tabs get colored cluster badges showing their K-Means group
+- The model persists across sessions and auto-fine-tunes when you save new tabs
+
 ### Settings
 - **Always restore to Private window** - Toggle to always use incognito
 - **Auto-lock after** - Automatically lock after inactivity (off, 5-60 min)
@@ -88,7 +96,8 @@ aegis-tab/
 ├── background.js           # Service worker: context menu to save tabs
 ├── common/
 │   ├── crypto.js           # AES-256-GCM encrypt/decrypt, PBKDF2 key derivation
-│   └── storage.js          # Multi-user storage, session key, settings
+│   ├── storage.js          # Multi-user storage, session key, settings, model persistence
+│   └── embedder.js         # From-scratch neural network (Skip-gram), cosine similarity, K-Means
 ├── popup/
 │   ├── popup.html          # Extension popup UI
 │   ├── popup.css           # Popup styles
@@ -112,6 +121,24 @@ aegis-tab/
 5. **Auto-lock** - Optional idle timer clears the session key after inactivity.
 6. **Zero knowledge** - No plaintext tab data is ever written to disk. Only ciphertext, IVs, and the salt are persisted.
 7. **Multi-user** - Each user has their own salt and verifier. Users cannot decrypt each other's tabs without the correct password.
+
+### Neural Network Architecture
+
+The embedding engine is a from-scratch Word2Vec Skip-gram implementation in pure JavaScript with zero external dependencies.
+
+- **Architecture**: Single hidden layer (embedding lookup) with softmax output
+- **Initialization**: Xavier initialization on flat Float32Array weight matrices
+- **Forward pass**: Embedding row lookup + dot product + softmax
+- **Backward pass**: Cross-entropy gradient computation and SGD weight update
+- **Training data**: Tab titles and URLs are tokenized into words, then skip-gram context pairs are generated with a window size of 2
+- **Training loop**: Chunked with setTimeout (200 pairs per frame) to avoid blocking the UI
+- **Embedding extraction**: Averages the input weight rows for all tokens in a tab's text
+- **Semantic search**: Tokenizes the query, embeds it, and ranks tabs by cosine similarity
+- **Clustering**: Raw K-Means with cosine distance, k=5, max 30 iterations
+- **Persistence**: The trained model is serialized to JSON and stored in chrome.storage.local
+- **Fine-tuning**: When new tabs are saved, the model runs 3 quick epochs at a low learning rate
+
+All matrix math uses flat typed arrays (Float32Array) to minimize garbage collection pressure and keep execution fast.
 
 ## Tech stack
 
