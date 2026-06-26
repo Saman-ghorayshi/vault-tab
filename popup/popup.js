@@ -30,6 +30,34 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const credentials = await get_credentials();
 
+  // password eye toggle: click to reveal/hide password on any toggle button
+  document.querySelectorAll('.password-toggle').forEach(toggle => {
+    toggle.addEventListener('click', () => {
+      const target_input = document.getElementById(toggle.dataset.target);
+      if (!target_input) return;
+      if (target_input.type === 'password') {
+        target_input.type = 'text';
+        toggle.textContent = 'Hide';
+      } else {
+        target_input.type = 'password';
+        toggle.textContent = 'Show';
+      }
+    });
+  });
+
+  // password strength meter: updates as user types their new password
+  const strength_bar = document.getElementById('password-strength-bar');
+  const strength_text = document.getElementById('password-strength-text');
+  if (setup_password && strength_bar) {
+    setup_password.addEventListener('input', () => {
+      const result = check_password_strength(setup_password.value);
+      strength_bar.style.width = result.percentage + '%';
+      strength_bar.style.backgroundColor = result.color;
+      strength_text.textContent = result.label;
+      strength_text.style.color = result.color;
+    });
+  }
+
   if (!credentials) {
     // first run: show password setup
     setup_view.classList.remove('hidden');
@@ -284,3 +312,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 });
+
+// evaluate password strength and return label, color, and percentage
+// checks length, character variety (upper, lower, digits, symbols)
+function check_password_strength(password) {
+  if (!password || password.length === 0) {
+    return { label: '', color: 'var(--bg-tertiary)', percentage: 0 };
+  }
+
+  let score = 0;
+  if (password.length >= 8) score += 25;
+  if (password.length >= 12) score += 15;
+  if (password.length >= 16) score += 10;
+
+  if (/[a-z]/.test(password)) score += 10;
+  if (/[A-Z]/.test(password)) score += 15;
+  if (/[0-9]/.test(password)) score += 15;
+  if (/[^a-zA-Z0-9]/.test(password)) score += 10;
+
+  if (score >= 80) {
+    return { label: 'Strong', color: '#4caf50', percentage: 100 };
+  } else if (score >= 50) {
+    return { label: 'Medium', color: '#ff9800', percentage: 60 };
+  } else if (score >= 25) {
+    return { label: 'Weak', color: '#f44336', percentage: 30 };
+  } else {
+    return { label: 'Too short', color: '#f44336', percentage: 10 };
+  }
+}

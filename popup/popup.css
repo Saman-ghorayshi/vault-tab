@@ -139,3 +139,50 @@ button:disabled {
   display: none !important;
 }
 
+/* password field with eye toggle */
+.password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-wrapper input {
+  width: 100%;
+  padding-right: 50px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: var(--transition);
+}
+
+.password-toggle:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-tertiary);
+}
+
+/* password strength meter */
+.password-strength-bar {
+  height: 4px;
+  border-radius: 2px;
+  background-color: var(--bg-tertiary);
+  margin-top: 8px;
+  transition: width 0.3s ease, background-color 0.3s ease;
+  width: 100%;
+}
+
+.password-strength-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  min-height: 14px;
+}
+

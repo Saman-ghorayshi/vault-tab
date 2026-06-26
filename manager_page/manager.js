@@ -47,6 +47,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   const lock_button = document.getElementById('lock-button');
   const search_input = document.getElementById('search-input');
 
+  // password eye toggle on manager unlock page
+  document.querySelectorAll('.password-toggle').forEach(toggle => {
+    toggle.addEventListener('click', () => {
+      const target_input = document.getElementById(toggle.dataset.target);
+      if (!target_input) return;
+      if (target_input.type === 'password') {
+        target_input.type = 'text';
+        toggle.textContent = 'Hide';
+      } else {
+        target_input.type = 'password';
+        toggle.textContent = 'Show';
+      }
+    });
+  });
+
   await load_settings();
   always_private_toggle.checked = settings.always_private;
   check_incognito_permission();
