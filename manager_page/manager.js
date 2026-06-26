@@ -296,15 +296,30 @@ function setup_action_panel() {
 
 function setup_keyboard_shortcuts() {
   window.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    // typing in inputs should not trigger shortcuts
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+      // except Escape inside search to blur it
+      if (e.key === 'Escape') {
+        e.target.blur();
+      }
+      return;
+    }
+
+    // Delete or Backspace: delete selected tabs
     if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
       delete_selected_items();
+      update_action_panel();
     }
+
+    // Ctrl+A: select all tabs in current group
     if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
       e.preventDefault();
       select_all_in_current_group();
+      update_action_panel();
     }
+
+    // J: move focus down, K: move focus up (vim style)
     if (e.key === 'j' || e.key === 'J') {
       e.preventDefault();
       move_focus(1);
@@ -313,12 +328,77 @@ function setup_keyboard_shortcuts() {
       e.preventDefault();
       move_focus(-1);
     }
+
+    // Enter: toggle selection on the focused tab
     if (e.key === 'Enter') {
       e.preventDefault();
       toggle_focused_selection();
+      update_action_panel();
     }
-    if (e.key === 'Escape') clear_selection();
+
+    // Space: toggle selection on focused tab (gmail style alternative)
+    if (e.key === ' ') {
+      e.preventDefault();
+      toggle_focused_selection();
+      update_action_panel();
+    }
+
+    // X: toggle selection on focused tab without moving (gmail style)
+    if (e.key === 'x' || e.key === 'X') {
+      e.preventDefault();
+      toggle_focused_selection();
+      move_focus(1);
+      update_action_panel();
+    }
+
+    // O: open selected tabs (or focused tab if none selected)
+    if (e.key === 'o' || e.key === 'O') {
+      e.preventDefault();
+      open_selected_or_focused();
+    }
+
+    // / (slash): focus the search bar
+    if (e.key === '/') {
+      e.preventDefault();
+      const search_input = document.getElementById('search-input');
+      if (search_input) search_input.focus();
+    }
+
+    // Escape: clear selection and hide panels
+    if (e.key === 'Escape') {
+      clear_selection();
+    }
   });
+}
+
+// open selected tabs, or if nothing selected, open the focused tab
+async function open_selected_or_focused() {
+  const selected = get_selected_tab_elements();
+  let urls = [];
+
+  if (selected.length > 0) {
+    selected.forEach(el => {
+      const link = el.querySelector('.tab-link');
+      if (link) {
+        const href = link.getAttribute('href');
+        if (href) urls.push(href);
+      }
+    });
+  } else {
+    // fallback: open the focused tab
+    const tabs = selection_state.all_tab_elements;
+    if (selection_state.focused_index >= 0 && tabs[selection_state.focused_index]) {
+      const link = tabs[selection_state.focused_index].querySelector('.tab-link');
+      if (link) {
+        const href = link.getAttribute('href');
+        if (href) urls.push(href);
+      }
+    }
+  }
+
+  if (urls.length > 0) {
+    await restore_tabs_batched(urls, settings.always_private);
+  }
 }
 
 function delete_selected_items() {
