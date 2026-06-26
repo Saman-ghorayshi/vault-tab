@@ -1,0 +1,21 @@
+# os and editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# node if any tooling is added later
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# build output
+dist/
+build/
+*.zip
+*.crx
+*.pem

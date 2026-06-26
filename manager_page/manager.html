@@ -8,33 +8,35 @@
 </head>
 <body>
   <div class="container">
-    <!-- Incognito Permission Warning Banner -->
+    <!-- incognito permission warning -->
     <div id="incognito-warning" class="incognito-warning hidden">
-      <span>⚠️ Private browsing access is disabled. To restore tabs in private windows, enable "Allow in Incognito" in Chrome extension settings.</span>
-      <button id="dismiss-warning" class="dismiss-warning-btn">×</button>
+      <span>Private browsing access is disabled. To restore tabs in private windows, enable "Allow in Incognito" in Chrome extension settings.</span>
+      <button id="dismiss-warning" class="dismiss-warning-btn">x</button>
     </div>
-    
+
     <header>
       <h1>Aegis Tab Manager</h1>
       <div class="header-actions">
+        <input type="text" id="search-input" class="search-input" placeholder="Search tabs..." />
         <input type="file" id="import-file" accept=".txt" style="display: none;">
         <button id="import-button" class="secondary-button">Import URLs</button>
         <button id="paste-urls-button" class="secondary-button">Paste URLs</button>
+        <button id="lock-button" class="lock-button">Lock</button>
       </div>
     </header>
-    
-    <!-- Settings Panel -->
+
+    <!-- settings panel -->
     <div id="settings-panel" class="settings-panel">
       <label class="setting-checkbox">
         <input type="checkbox" id="always-private-toggle">
         <span>Always restore to Private window</span>
       </label>
     </div>
-    
+
     <div id="loading-message" class="loading-message">
       <p>Loading your saved tabs...</p>
     </div>
-    
+
     <div id="password-prompt-view" class="hidden">
       <div class="card">
         <h2>Unlock Aegis Tab</h2>
@@ -45,22 +47,22 @@
         <button id="manager-unlock-button" class="primary-button">Unlock</button>
       </div>
     </div>
-    
+
     <div id="groups-container" class="groups-container hidden">
-      <!-- Tab groups will be dynamically added here -->
+      <!-- tab groups rendered dynamically -->
     </div>
   </div>
-  
-  <!-- Paste URLs Modal -->
+
+  <!-- paste urls modal -->
   <div id="paste-modal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
         <h3>Paste URLs</h3>
-        <button id="close-paste-modal" class="modal-close">×</button>
+        <button id="close-paste-modal" class="modal-close">x</button>
       </div>
       <div class="modal-body">
-        <p class="modal-description">Paste any text containing URLs. We'll automatically extract all valid links.</p>
-        <textarea id="paste-textarea" placeholder="Paste your URLs here...&#10;&#10;Example:&#10;https://github.com&#10;https://stackoverflow.com"></textarea>
+        <p class="modal-description">Paste any text containing URLs. We will automatically extract all valid links.</p>
+        <textarea id="paste-textarea" placeholder="Paste your URLs here..."></textarea>
       </div>
       <div class="modal-footer">
         <button id="cancel-paste" class="secondary-button">Cancel</button>
@@ -68,15 +70,15 @@
       </div>
     </div>
   </div>
-  
-  <!-- Undo Toast -->
+
+  <!-- undo toast -->
   <div id="undo-toast" class="undo-toast hidden">
     <span id="toast-message">Deleted</span>
     <button id="undo-button" class="undo-button">Undo</button>
     <span id="toast-timer" class="toast-timer">(5s)</span>
   </div>
-  
-  <!-- Keyboard Shortcuts Help -->
+
+  <!-- keyboard shortcuts help -->
   <div id="shortcuts-help" class="shortcuts-help">
     <span>Shortcuts: </span>
     <kbd>Click</kbd> select |

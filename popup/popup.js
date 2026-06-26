@@ -1,177 +1,220 @@
-import { 
-  getCredentials, saveCredentials, getTabGroups, 
-  saveTabGroups, getSessionKey, storeSessionKey 
+import {
+  get_credentials, save_credentials, get_tab_groups,
+  save_tab_groups, get_session_key, store_session_key
 } from '../common/storage.js';
-import { 
-  generateSalt, deriveKeyFromPassword, encrypt, decrypt, 
-  arrayBufferToBase64, base64ToArrayBuffer 
+import {
+  generate_salt, derive_key_from_password, encrypt, decrypt,
+  array_buffer_to_base64, base64_to_array_buffer
 } from '../common/crypto.js';
 
+const VERIFIER_STRING = 'aegis-verification-string';
+const MIN_PASSWORD_LENGTH = 8;
+
 document.addEventListener('DOMContentLoaded', async () => {
-  const lockedView = document.getElementById('locked-view');
-  const unlockedView = document.getElementById('unlocked-view');
-  const setupView = document.getElementById('setup-view');
-  const unlockView = document.getElementById('unlock-view');
-  const setupError = document.getElementById('setup-error');
-  const unlockError = document.getElementById('unlock-error');
-  
-  const setupPassword = document.getElementById('setup-password');
-  const setupPasswordConfirm = document.getElementById('setup-password-confirm');
-  const setupButton = document.getElementById('setup-button');
-  
-  const unlockPassword = document.getElementById('unlock-password');
-  const unlockButton = document.getElementById('unlock-button');
-  
-  const saveTabsButton = document.getElementById('save-tabs-button');
-  const viewTabsButton = document.getElementById('view-tabs-button');
-  
-  const credentials = await getCredentials();
-  
+  const locked_view = document.getElementById('locked-view');
+  const unlocked_view = document.getElementById('unlocked-view');
+  const setup_view = document.getElementById('setup-view');
+  const unlock_view = document.getElementById('unlock-view');
+  const setup_error = document.getElementById('setup-error');
+  const unlock_error = document.getElementById('unlock-error');
+
+  const setup_password = document.getElementById('setup-password');
+  const setup_password_confirm = document.getElementById('setup-password-confirm');
+  const setup_button = document.getElementById('setup-button');
+
+  const unlock_password = document.getElementById('unlock-password');
+  const unlock_button = document.getElementById('unlock-button');
+
+  const save_tabs_button = document.getElementById('save-tabs-button');
+  const view_tabs_button = document.getElementById('view-tabs-button');
+
+  const credentials = await get_credentials();
+
   if (!credentials) {
-    setupView.classList.remove('hidden');
-    setTimeout(() => setupPassword.focus(), 100);
-    
-    setupPassword.addEventListener('keypress', (e) => { if (e.key === 'Enter') setupPasswordConfirm.focus(); });
-    setupPasswordConfirm.addEventListener('keypress', (e) => { if (e.key === 'Enter') setupButton.click(); });
-    
-    setupButton.addEventListener('click', async () => {
-      const password = setupPassword.value;
-      const confirmPassword = setupPasswordConfirm.value;
-      
-      setupError.classList.add('hidden');
-      if (password !== confirmPassword) { setupError.textContent = 'Passwords do not match'; setupError.classList.remove('hidden'); return; }
-      if (password.length < 8) { setupError.textContent = 'Password must be at least 8 characters'; setupError.classList.remove('hidden'); return; }
-      
-      setupButton.disabled = true;
-      setupButton.textContent = 'Creating...';
-      
+    // first run: show password setup
+    setup_view.classList.remove('hidden');
+    setTimeout(() => setup_password.focus(), 100);
+
+    setup_password.addEventListener('keypress', (e) => { if (e.key === 'Enter') setup_password_confirm.focus(); });
+    setup_password_confirm.addEventListener('keypress', (e) => { if (e.key === 'Enter') setup_button.click(); });
+
+    setup_button.addEventListener('click', async () => {
+      const password = setup_password.value;
+      const confirm_password = setup_password_confirm.value;
+
+      setup_error.classList.add('hidden');
+      if (password !== confirm_password) {
+        setup_error.textContent = 'Passwords do not match';
+        setup_error.classList.remove('hidden');
+        return;
+      }
+      if (password.length < MIN_PASSWORD_LENGTH) {
+        setup_error.textContent = 'Password must be at least 8 characters';
+        setup_error.classList.remove('hidden');
+        return;
+      }
+
+      setup_button.disabled = true;
+      setup_button.textContent = 'Creating...';
+
       try {
-        const salt = await generateSalt();
-        const key = await deriveKeyFromPassword(password, salt);
-        const verifier = await encrypt('aegis-verification-string', key);
-        
-        await saveCredentials({ passwordSalt: arrayBufferToBase64(salt), passwordVerifier: verifier });
-        await storeSessionKey(key);
-        
-        lockedView.classList.add('hidden');
-        unlockedView.classList.remove('hidden');
+        const salt = generate_salt();
+        const key = await derive_key_from_password(password, salt);
+        const verifier = await encrypt(VERIFIER_STRING, key);
+
+        await save_credentials({
+          password_salt: array_buffer_to_base64(salt),
+          password_verifier: verifier
+        });
+        await store_session_key(key);
+
+        locked_view.classList.add('hidden');
+        unlocked_view.classList.remove('hidden');
       } catch (error) {
-        setupError.textContent = `Setup failed: ${error.message}`; setupError.classList.remove('hidden');
-        setupButton.disabled = false; setupButton.textContent = 'Create Password';
+        setup_error.textContent = `Setup failed: ${error.message}`;
+        setup_error.classList.remove('hidden');
+        setup_button.disabled = false;
+        setup_button.textContent = 'Create Password';
       }
     });
   } else {
-    const sessionKey = await getSessionKey();
-    if (sessionKey) {
-      lockedView.classList.add('hidden');
-      unlockedView.classList.remove('hidden');
+    // returning user: try session key or prompt for password
+    const session_key = await get_session_key();
+    if (session_key) {
+      locked_view.classList.add('hidden');
+      unlocked_view.classList.remove('hidden');
     } else {
-      unlockView.classList.remove('hidden');
-      setTimeout(() => unlockPassword.focus(), 100);
-      unlockPassword.addEventListener('keypress', (e) => { if (e.key === 'Enter') unlockButton.click(); });
-      
-      unlockButton.addEventListener('click', async () => {
-        const password = unlockPassword.value;
-        unlockError.classList.add('hidden');
-        if (!password) { unlockError.textContent = 'Please enter your password'; unlockError.classList.remove('hidden'); return; }
-        
-        unlockButton.disabled = true; unlockButton.textContent = 'Unlocking...';
-        
+      unlock_view.classList.remove('hidden');
+      setTimeout(() => unlock_password.focus(), 100);
+      unlock_password.addEventListener('keypress', (e) => { if (e.key === 'Enter') unlock_button.click(); });
+
+      unlock_button.addEventListener('click', async () => {
+        const password = unlock_password.value;
+        unlock_error.classList.add('hidden');
+        if (!password) {
+          unlock_error.textContent = 'Please enter your password';
+          unlock_error.classList.remove('hidden');
+          return;
+        }
+
+        unlock_button.disabled = true;
+        unlock_button.textContent = 'Unlocking...';
+
         try {
-          const salt = base64ToArrayBuffer(credentials.passwordSalt);
-          const key = await deriveKeyFromPassword(password, salt);
-          const decryptedVerifier = await decrypt(credentials.passwordVerifier, key);
-          
-          if (decryptedVerifier === 'aegis-verification-string') {
-            await storeSessionKey(key);
-            lockedView.classList.add('hidden');
-            unlockedView.classList.remove('hidden');
-          } else throw new Error('Decryption failed');
+          const salt = base64_to_array_buffer(credentials.password_salt);
+          const key = await derive_key_from_password(password, salt);
+          const decrypted_verifier = await decrypt(credentials.password_verifier, key);
+
+          if (decrypted_verifier === VERIFIER_STRING) {
+            await store_session_key(key);
+            locked_view.classList.add('hidden');
+            unlocked_view.classList.remove('hidden');
+          } else {
+            throw new Error('Decryption failed');
+          }
         } catch (error) {
-          unlockError.textContent = 'Incorrect password'; unlockError.classList.remove('hidden');
-          unlockButton.disabled = false; unlockButton.textContent = 'Unlock';
+          unlock_error.textContent = 'Incorrect password';
+          unlock_error.classList.remove('hidden');
+          unlock_button.disabled = false;
+          unlock_button.textContent = 'Unlock';
         }
       });
     }
   }
-  
-  saveTabsButton.addEventListener('click', async () => {
-    const sessionKey = await getSessionKey();
-    if (!sessionKey) {
-      lockedView.classList.remove('hidden'); 
-      unlockedView.classList.add('hidden'); 
-      unlockView.classList.remove('hidden');
+
+  // save all open tabs in the current window, encrypted
+  save_tabs_button.addEventListener('click', async () => {
+    const session_key = await get_session_key();
+    if (!session_key) {
+      locked_view.classList.remove('hidden');
+      unlocked_view.classList.add('hidden');
+      unlock_view.classList.remove('hidden');
       return;
     }
-    
-    saveTabsButton.disabled = true; 
-    saveTabsButton.textContent = 'Saving...';
-    
-    try {
-      // 🚀 PERFORMANCE FIX: Query all tabs at once without heavy match patterns
-      const originalTabs = await chrome.tabs.query({ currentWindow: true });
-      
-      const tabsToSave = [];
-      const tabIdsToRemove = [];
-      const managerUrl = chrome.runtime.getURL('manager_page/manager.html');
 
-      for (let i = 0; i < originalTabs.length; i++) {
-        const tab = originalTabs[i];
-        
-        // use pendingUrl if the tab is still loading and url is empty
-        const targetUrl = tab.url || tab.pendingUrl;
-        
-        // skip invalid, system, or already open manager tabs
-        if (!targetUrl || targetUrl.startsWith('chrome://') || targetUrl.startsWith('chrome-extension://')) {
+    save_tabs_button.disabled = true;
+    save_tabs_button.textContent = 'Saving...';
+
+    try {
+      const all_tabs = await chrome.tabs.query({ currentWindow: true });
+      const manager_url = chrome.runtime.getURL('manager_page/manager.html');
+
+      const tabs_to_save = [];
+      const tab_ids_to_remove = [];
+
+      for (let i = 0; i < all_tabs.length; i++) {
+        const tab = all_tabs[i];
+
+        // fall back to pendingUrl if url is empty (tab still loading or just pasted)
+        const target_url = tab.url || tab.pendingUrl || '';
+
+        // skip empty, system, and extension urls
+        if (!target_url ||
+            target_url.startsWith('chrome://') ||
+            target_url.startsWith('chrome-extension://') ||
+            target_url.startsWith('about:') ||
+            target_url.startsWith('edge://') ||
+            target_url.startsWith('about:blank')) {
           continue;
         }
-        
-        tabsToSave.push({
-          title: tab.title || 'Loading...',
-          url: targetUrl,
-          favIconUrl: tab.favIconUrl || null
-        });
 
-        tabIdsToRemove.push(tab.id);
+        // use title from tab, or derive from url, or fallback placeholder
+        let title = tab.title;
+        if (!title || title.trim() === '') {
+          try { title = new URL(target_url).hostname; } catch (e) { title = 'Untitled'; }
+        }
+
+        tabs_to_save.push({
+          title: title,
+          url: target_url,
+          fav_icon_url: tab.favIconUrl || null
+        });
+        tab_ids_to_remove.push(tab.id);
       }
-      
-      if (tabsToSave.length === 0) {
+
+      if (tabs_to_save.length === 0) {
         alert('No saveable tabs found in this window.');
-        saveTabsButton.disabled = false; 
-        saveTabsButton.textContent = 'Save All Tabs';
+        save_tabs_button.disabled = false;
+        save_tabs_button.textContent = 'Save All Tabs';
         return;
       }
-      
-      // Encrypt payload
-      const tabData = {
+
+      // build the tab data payload and encrypt it
+      const tab_data = {
         date: new Date().toISOString(),
-        tabs: tabsToSave
+        tabs: tabs_to_save
       };
-      
-      const encrypted = await encrypt(JSON.stringify(tabData), sessionKey);
-      const groups = await getTabGroups();
-      groups.unshift({ id: Date.now().toString(), iv: encrypted.iv, ciphertext: encrypted.ciphertext }); 
-      await saveTabGroups(groups);
-      
-      const managerTab = await chrome.tabs.create({ url: managerUrl });
-      
-      const finalIdsToRemove = tabIdsToRemove.filter(id => id !== managerTab.id);
-      if (finalIdsToRemove.length > 0) {
-        await chrome.tabs.remove(finalIdsToRemove);
+
+      const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
+      const groups = await get_tab_groups();
+      groups.unshift({
+        id: Date.now().toString(),
+        iv: encrypted.iv,
+        ciphertext: encrypted.ciphertext
+      });
+      await save_tab_groups(groups);
+
+      // open the manager page, then close the saved tabs
+      const manager_tab = await chrome.tabs.create({ url: manager_url });
+      const final_ids_to_remove = tab_ids_to_remove.filter(id => id !== manager_tab.id);
+      if (final_ids_to_remove.length > 0) {
+        await chrome.tabs.remove(final_ids_to_remove);
       }
-      
+
       window.close();
     } catch (error) {
       alert(`Failed to save tabs: ${error.message}`);
-      saveTabsButton.disabled = false; 
-      saveTabsButton.textContent = 'Save All Tabs';
+      save_tabs_button.disabled = false;
+      save_tabs_button.textContent = 'Save All Tabs';
     }
   });
-  viewTabsButton.addEventListener('click', async () => {
+
+  view_tabs_button.addEventListener('click', async () => {
     try {
-      // RESTORED PROFESSIONAL PATH
       await chrome.tabs.create({ url: chrome.runtime.getURL('manager_page/manager.html') });
       window.close();
-    } catch (error) { alert(`Failed to open manager: ${error.message}`); }
+    } catch (error) {
+      alert(`Failed to open manager: ${error.message}`);
+    }
   });
 });

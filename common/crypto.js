@@ -1,43 +1,48 @@
-/**
- * Cryptographic functions for Aegis Tab
- */
+// Cryptographic functions for Aegis Tab
+// Uses Web Crypto API with AES-256-GCM for authenticated encryption
 
-// Convert ArrayBuffer to Base64
-export function arrayBufferToBase64(buffer) {
-  return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+// convert ArrayBuffer to Base64 without spreading (avoids stack overflow on large buffers)
+export function array_buffer_to_base64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunk_size = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk_size) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk_size));
+  }
+  return btoa(binary);
 }
 
-// Convert Base64 to ArrayBuffer
-export function base64ToArrayBuffer(base64) {
-  const binaryString = atob(base64);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+// convert Base64 string back to ArrayBuffer
+export function base64_to_array_buffer(base64) {
+  const binary_string = atob(base64);
+  const bytes = new Uint8Array(binary_string.length);
+  for (let i = 0; i < binary_string.length; i++) {
+    bytes[i] = binary_string.charCodeAt(i);
   }
   return bytes.buffer;
 }
 
-// Generate a random 16-byte salt
-export async function generateSalt() {
+// generate a random 16-byte salt for key derivation
+export function generate_salt() {
   return crypto.getRandomValues(new Uint8Array(16));
 }
 
-// Generate a random 12-byte IV
-export async function generateIv() {
+// generate a random 12-byte IV for AES-GCM
+export function generate_iv() {
   return crypto.getRandomValues(new Uint8Array(12));
 }
 
-// Derive a key from password using PBKDF2
-export async function deriveKeyFromPassword(password, salt) {
+// derive an AES-GCM key from a password using PBKDF2
+export async function derive_key_from_password(password, salt) {
   const encoder = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
+  const key_material = await crypto.subtle.importKey(
     'raw',
     encoder.encode(password),
     { name: 'PBKDF2' },
     false,
     ['deriveKey']
   );
-  
+
   return crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
@@ -45,70 +50,56 @@ export async function deriveKeyFromPassword(password, salt) {
       iterations: 310000,
       hash: 'SHA-256'
     },
-    keyMaterial,
+    key_material,
     { name: 'AES-GCM', length: 256 },
-    true, // Changed to true to allow the key to be extractable
+    true,
     ['encrypt', 'decrypt']
   );
 }
 
-// Encrypt plaintext using AES-GCM
+// encrypt plaintext string with AES-GCM, returns { iv, ciphertext } as base64
 export async function encrypt(plaintext, key) {
   const encoder = new TextEncoder();
-  const iv = await generateIv();
+  const iv = generate_iv();
   const encrypted = await crypto.subtle.encrypt(
-    {
-      name: 'AES-GCM',
-      iv: iv
-    },
+    { name: 'AES-GCM', iv: iv },
     key,
     encoder.encode(plaintext)
   );
-  
+
   return {
-    iv: arrayBufferToBase64(iv),
-    ciphertext: arrayBufferToBase64(encrypted)
+    iv: array_buffer_to_base64(iv),
+    ciphertext: array_buffer_to_base64(encrypted)
   };
 }
 
-export async function exportKey(key) {
-  return crypto.subtle.exportKey(
-    "raw",
-    key
+// decrypt a package with AES-GCM, returns plaintext string
+export async function decrypt(encrypted_package, key) {
+  const decoder = new TextDecoder();
+  const iv = base64_to_array_buffer(encrypted_package.iv);
+  const ciphertext = base64_to_array_buffer(encrypted_package.ciphertext);
+
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: iv },
+    key,
+    ciphertext
   );
+
+  return decoder.decode(decrypted);
 }
 
-export async function importKey(keyBuffer) {
+// export a CryptoKey to raw ArrayBuffer for storage
+export async function export_key(key) {
+  return crypto.subtle.exportKey('raw', key);
+}
+
+// import a raw ArrayBuffer back into a CryptoKey
+export async function import_key(key_buffer) {
   return crypto.subtle.importKey(
-    "raw",
-    keyBuffer,
-    { name: "AES-GCM", length: 256 },
-    true, // extractable
-    ["encrypt", "decrypt"]
+    'raw',
+    key_buffer,
+    { name: 'AES-GCM', length: 256 },
+    true,
+    ['encrypt', 'decrypt']
   );
 }
-
-
-
-// Decrypt ciphertext using AES-GCM
-export async function decrypt(encryptedPackage, key) {
-  try {
-    const decoder = new TextDecoder();
-    const iv = base64ToArrayBuffer(encryptedPackage.iv);
-    const ciphertext = base64ToArrayBuffer(encryptedPackage.ciphertext);
-    
-    const decrypted = await crypto.subtle.decrypt(
-      {
-        name: 'AES-GCM',
-        iv: iv
-      },
-      key,
-      ciphertext
-    );
-    
-    return decoder.decode(decrypted);
-  } catch (error) {
-    throw new Error('Decryption failed');
-  }
-}
-

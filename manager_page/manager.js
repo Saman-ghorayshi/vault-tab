@@ -1,489 +1,656 @@
-import { 
-  getCredentials, 
-  getTabGroups, 
-  saveTabGroups, 
-  getSessionKey, 
-  storeSessionKey 
+import {
+  get_credentials, get_tab_groups, save_tab_groups,
+  get_session_key, store_session_key, clear_session_key,
+  get_settings, save_settings
 } from '../common/storage.js';
-import { 
-  deriveKeyFromPassword, 
-  decrypt, 
-  encrypt,
-  base64ToArrayBuffer 
+import {
+  derive_key_from_password, decrypt, encrypt,
+  base64_to_array_buffer
 } from '../common/crypto.js';
 
-// ... Keep the rest of your manager.js exactly the same! ...
+const VERIFIER_STRING = 'aegis-verification-string';
 
-// Phases 2-4 States
-const SelectionState = { selectedTabs: new Set(), lastClickedIndex: -1, currentGroupId: null, focusedIndex: -1, allTabElements: [] };
-const DeleteState = { pendingDeletions: [], toastVisible: false };
-const Settings = { alwaysPrivate: false };
+// state objects
+const selection_state = {
+  selected_tabs: new Set(),
+  last_clicked_index: -1,
+  current_group_id: null,
+  focused_index: -1,
+  all_tab_elements: []
+};
+
+const delete_state = {
+  pending_deletions: [],
+  toast_visible: false,
+  timer_interval: null
+};
+
+const settings = { always_private: false };
 
 document.addEventListener('DOMContentLoaded', async () => {
-  const loadingMessage = document.getElementById('loading-message');
-  const passwordPromptView = document.getElementById('password-prompt-view');
-  const groupsContainer = document.getElementById('groups-container');
-  const managerPassword = document.getElementById('manager-password');
-  const managerError = document.getElementById('manager-error');
-  const managerUnlockButton = document.getElementById('manager-unlock-button');
-  const importButton = document.getElementById('import-button');
-  const importFile = document.getElementById('import-file');
-  const pasteUrlsButton = document.getElementById('paste-urls-button');
-  const alwaysPrivateToggle = document.getElementById('always-private-toggle');
-  
-  await loadSettings();
-  alwaysPrivateToggle.checked = Settings.alwaysPrivate;
-  checkIncognitoPermission();
-  
-  alwaysPrivateToggle.addEventListener('change', (e) => {
-    Settings.alwaysPrivate = e.target.checked;
-    saveSettings();
+  const loading_message = document.getElementById('loading-message');
+  const password_prompt_view = document.getElementById('password-prompt-view');
+  const groups_container = document.getElementById('groups-container');
+  const manager_password = document.getElementById('manager-password');
+  const manager_error = document.getElementById('manager-error');
+  const manager_unlock_button = document.getElementById('manager-unlock-button');
+  const import_button = document.getElementById('import-button');
+  const import_file = document.getElementById('import-file');
+  const paste_urls_button = document.getElementById('paste-urls-button');
+  const always_private_toggle = document.getElementById('always-private-toggle');
+  const lock_button = document.getElementById('lock-button');
+  const search_input = document.getElementById('search-input');
+
+  await load_settings();
+  always_private_toggle.checked = settings.always_private;
+  check_incognito_permission();
+
+  always_private_toggle.addEventListener('change', (e) => {
+    settings.always_private = e.target.checked;
+    save_settings(settings);
   });
-  
+
   document.getElementById('dismiss-warning')?.addEventListener('click', () => {
     document.getElementById('incognito-warning').classList.add('hidden');
   });
-  
-  importButton.addEventListener('click', () => importFile.click());
-  
-  importFile.addEventListener('change', async (e) => {
+
+  import_button.addEventListener('click', () => import_file.click());
+
+  import_file.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     try {
       const text = await file.text();
-      const urls = text.split('\n').map(url => url.trim()).filter(url => url && (url.startsWith('http://') || url.startsWith('https://')));
-      if (urls.length === 0) return alert('No valid URLs found.');
-      await saveUrlsAsGroup(urls, 'Imported');
+      const urls = text.split('\n')
+        .map(url => url.trim())
+        .filter(url => url && (url.startsWith('http://') || url.startsWith('https://')));
+      if (urls.length === 0) {
+        alert('No valid URLs found.');
+        return;
+      }
+      await save_urls_as_group(urls, 'Imported');
     } catch (error) {
       alert(`Failed to import URLs: ${error.message}`);
     }
-    importFile.value = '';
+    import_file.value = '';
   });
-  
-  setupPasteModal();
-  pasteUrlsButton.addEventListener('click', openPasteModal);
-  setupKeyboardShortcuts();
-  
-  const sessionKey = await getSessionKey();
-  if (sessionKey) {
-    renderPage(sessionKey);
+
+  setup_paste_modal();
+  paste_urls_button.addEventListener('click', open_paste_modal);
+  setup_keyboard_shortcuts();
+
+  // search filter
+  if (search_input) {
+    search_input.addEventListener('input', filter_tabs_by_search);
+  }
+
+  // lock button: clear session key and show password prompt
+  if (lock_button) {
+    lock_button.addEventListener('click', async () => {
+      await clear_session_key();
+      selection_state.selected_tabs.clear();
+      selection_state.all_tab_elements = [];
+      groups_container.innerHTML = '';
+      groups_container.classList.add('hidden');
+      password_prompt_view.classList.remove('hidden');
+      setTimeout(() => manager_password.focus(), 100);
+    });
+  }
+
+  const session_key = await get_session_key();
+  if (session_key) {
+    render_page(session_key);
   } else {
-    loadingMessage.classList.add('hidden');
-    passwordPromptView.classList.remove('hidden');
-    setTimeout(() => managerPassword.focus(), 100);
-    
-    managerPassword.addEventListener('keypress', (e) => { if (e.key === 'Enter') managerUnlockButton.click(); });
-    
-    managerUnlockButton.addEventListener('click', async () => {
-      const password = managerPassword.value;
-      managerError.classList.add('hidden');
-      if (!password) { managerError.textContent = 'Please enter your password'; managerError.classList.remove('hidden'); return; }
-      
-      managerUnlockButton.disabled = true;
-      managerUnlockButton.textContent = 'Unlocking...';
-      
+    loading_message.classList.add('hidden');
+    password_prompt_view.classList.remove('hidden');
+    setTimeout(() => manager_password.focus(), 100);
+
+    manager_password.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') manager_unlock_button.click();
+    });
+
+    manager_unlock_button.addEventListener('click', async () => {
+      const password = manager_password.value;
+      manager_error.classList.add('hidden');
+      if (!password) {
+        manager_error.textContent = 'Please enter your password';
+        manager_error.classList.remove('hidden');
+        return;
+      }
+
+      manager_unlock_button.disabled = true;
+      manager_unlock_button.textContent = 'Unlocking...';
+
       try {
-        const credentials = await getCredentials();
+        const credentials = await get_credentials();
         if (!credentials) throw new Error('No credentials');
-        
-        const salt = base64ToArrayBuffer(credentials.passwordSalt);
-        const key = await deriveKeyFromPassword(password, salt);
-        const decryptedVerifier = await decrypt(credentials.passwordVerifier, key);
-        
-        if (decryptedVerifier === 'aegis-verification-string') {
-          await storeSessionKey(key);
-          passwordPromptView.classList.add('hidden');
-          renderPage(key);
-        } else throw new Error('Decryption failed');
+
+        const salt = base64_to_array_buffer(credentials.password_salt);
+        const key = await derive_key_from_password(password, salt);
+        const decrypted_verifier = await decrypt(credentials.password_verifier, key);
+
+        if (decrypted_verifier === VERIFIER_STRING) {
+          await store_session_key(key);
+          password_prompt_view.classList.add('hidden');
+          render_page(key);
+        } else {
+          throw new Error('Decryption failed');
+        }
       } catch (error) {
-        managerError.textContent = 'Incorrect password';
-        managerError.classList.remove('hidden');
-        managerUnlockButton.disabled = false;
-        managerUnlockButton.textContent = 'Unlock';
+        manager_error.textContent = 'Incorrect password';
+        manager_error.classList.remove('hidden');
+        manager_unlock_button.disabled = false;
+        manager_unlock_button.textContent = 'Unlock';
       }
     });
   }
 });
 
-async function checkIncognitoPermission() {
+async function check_incognito_permission() {
   try {
-    const isAllowed = await chrome.extension.isAllowedIncognitoAccess();
-    if (!isAllowed) document.getElementById('incognito-warning').classList.remove('hidden');
-  } catch (error) {}
+    const is_allowed = await chrome.extension.isAllowedIncognitoAccess();
+    if (!is_allowed) {
+      document.getElementById('incognito-warning').classList.remove('hidden');
+    }
+  } catch (error) {
+    // ignore
+  }
 }
 
-async function loadSettings() {
+async function load_settings() {
   try {
-    const result = await chrome.storage.local.get('aegis_settings');
-    if (result.aegis_settings) Settings.alwaysPrivate = result.aegis_settings.alwaysPrivate || false;
-  } catch (error) {}
+    const stored = await get_settings();
+    settings.always_private = stored.always_private || false;
+  } catch (error) {
+    // use defaults
+  }
 }
 
-async function saveSettings() {
-  try { await chrome.storage.local.set({ aegis_settings: { alwaysPrivate: Settings.alwaysPrivate } }); } catch (error) {}
-}
-
-function setupPasteModal() {
+function setup_paste_modal() {
   const modal = document.getElementById('paste-modal');
-  const closeBtn = document.getElementById('close-paste-modal');
-  const cancelBtn = document.getElementById('cancel-paste');
-  const saveBtn = document.getElementById('save-pasted-urls');
+  const close_btn = document.getElementById('close-paste-modal');
+  const cancel_btn = document.getElementById('cancel-paste');
+  const save_btn = document.getElementById('save-pasted-urls');
   const textarea = document.getElementById('paste-textarea');
-  
-  closeBtn.addEventListener('click', closePasteModal);
-  cancelBtn.addEventListener('click', closePasteModal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) closePasteModal(); });
-  
-  saveBtn.addEventListener('click', async () => {
+
+  close_btn.addEventListener('click', close_paste_modal);
+  cancel_btn.addEventListener('click', close_paste_modal);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close_paste_modal(); });
+
+  save_btn.addEventListener('click', async () => {
     const text = textarea.value;
-    const urlRegex = /https?:\/\/[^\s<>"']+/g;
-    const matches = text.match(urlRegex);
-    if (!matches || matches.length === 0) return alert('No valid URLs found.');
-    const uniqueUrls = [...new Set(matches)];
-    await saveUrlsAsGroup(uniqueUrls, 'Pasted');
-    closePasteModal();
+    const url_regex = /https?:\/\/[^\s<>"']+/g;
+    const matches = text.match(url_regex);
+    if (!matches || matches.length === 0) {
+      alert('No valid URLs found.');
+      return;
+    }
+    const unique_urls = [...new Set(matches)];
+    await save_urls_as_group(unique_urls, 'Pasted');
+    close_paste_modal();
   });
 }
 
-function openPasteModal() {
+function open_paste_modal() {
   document.getElementById('paste-modal').classList.remove('hidden');
   document.getElementById('paste-textarea').value = '';
   setTimeout(() => document.getElementById('paste-textarea').focus(), 100);
 }
 
-function closePasteModal() { document.getElementById('paste-modal').classList.add('hidden'); }
+function close_paste_modal() {
+  document.getElementById('paste-modal').classList.add('hidden');
+}
 
-async function saveUrlsAsGroup(urls, prefix = 'Imported') {
-  const sessionKey = await getSessionKey();
-  if (!sessionKey) return alert('Please unlock first.');
-  
-  const tabData = {
+async function save_urls_as_group(urls, prefix = 'Imported') {
+  const session_key = await get_session_key();
+  if (!session_key) {
+    alert('Please unlock first.');
+    return;
+  }
+
+  const tab_data = {
     date: new Date().toISOString(),
     tabs: urls.map(url => {
       let hostname = url;
       try { hostname = new URL(url).hostname; } catch (e) {}
-      return { title: `${prefix}: ${hostname}`, url: url, favIconUrl: null };
+      return { title: `${prefix}: ${hostname}`, url: url, fav_icon_url: null };
     })
   };
-  
-  const encrypted = await encrypt(JSON.stringify(tabData), sessionKey);
-  const newGroup = { id: Date.now().toString(), iv: encrypted.iv, ciphertext: encrypted.ciphertext };
-  const groups = await getTabGroups();
-  groups.unshift(newGroup); 
-  await saveTabGroups(groups);
+
+  const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
+  const new_group = {
+    id: Date.now().toString(),
+    iv: encrypted.iv,
+    ciphertext: encrypted.ciphertext
+  };
+  const groups = await get_tab_groups();
+  groups.unshift(new_group);
+  await save_tab_groups(groups);
   location.reload();
 }
 
-function setupKeyboardShortcuts() {
+function setup_keyboard_shortcuts() {
   window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelectedItems(); }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'a') { e.preventDefault(); selectAllInCurrentGroup(); }
-    if (e.key === 'j' || e.key === 'J') { e.preventDefault(); moveFocus(1); }
-    if (e.key === 'k' || e.key === 'K') { e.preventDefault(); moveFocus(-1); }
-    if (e.key === 'Enter') { e.preventDefault(); toggleFocusedSelection(); }
-    if (e.key === 'Escape') clearSelection();
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      delete_selected_items();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+      e.preventDefault();
+      select_all_in_current_group();
+    }
+    if (e.key === 'j' || e.key === 'J') {
+      e.preventDefault();
+      move_focus(1);
+    }
+    if (e.key === 'k' || e.key === 'K') {
+      e.preventDefault();
+      move_focus(-1);
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      toggle_focused_selection();
+    }
+    if (e.key === 'Escape') clear_selection();
   });
 }
 
-function deleteSelectedItems() {
-  if (SelectionState.selectedTabs.size === 0) return;
-  SelectionState.selectedTabs.forEach((tab) => {
-    softDeleteTab(tab, tab.dataset.groupId, parseInt(tab.dataset.tabIndex, 10));
+function delete_selected_items() {
+  if (selection_state.selected_tabs.size === 0) return;
+  selection_state.selected_tabs.forEach((tab) => {
+    soft_delete_tab(tab, tab.dataset.groupId, parseInt(tab.dataset.tabIndex, 10));
   });
 }
 
-function selectAllInCurrentGroup() {
-  let targetGroup = SelectionState.currentGroupId ? document.querySelector(`[data-group-id="${SelectionState.currentGroupId}"]`) : document.querySelector('.group-card');
-  if (targetGroup) {
-    targetGroup.querySelectorAll('.tab-item').forEach(tab => {
-      SelectionState.selectedTabs.add(tab);
+function select_all_in_current_group() {
+  let target_group = selection_state.current_group_id
+    ? document.querySelector(`[data-group-id="${selection_state.current_group_id}"]`)
+    : document.querySelector('.group-card');
+  if (target_group) {
+    target_group.querySelectorAll('.tab-item').forEach(tab => {
+      selection_state.selected_tabs.add(tab);
       tab.classList.add('selected');
     });
-    SelectionState.currentGroupId = targetGroup.dataset.groupId;
+    selection_state.current_group_id = target_group.dataset.groupId;
   }
 }
 
-function moveFocus(direction) {
-  const tabs = SelectionState.allTabElements;
+function move_focus(direction) {
+  const tabs = selection_state.all_tab_elements;
   if (tabs.length === 0) return;
-  if (SelectionState.focusedIndex >= 0 && tabs[SelectionState.focusedIndex]) tabs[SelectionState.focusedIndex].classList.remove('focused');
-  
-  let newIndex = Math.max(0, Math.min(SelectionState.focusedIndex + direction, tabs.length - 1));
-  SelectionState.focusedIndex = newIndex;
-  
-  if (tabs[newIndex]) {
-    tabs[newIndex].classList.add('focused');
-    tabs[newIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    SelectionState.currentGroupId = tabs[newIndex].dataset.groupId;
+  if (selection_state.focused_index >= 0 && tabs[selection_state.focused_index]) {
+    tabs[selection_state.focused_index].classList.remove('focused');
+  }
+
+  let new_index = Math.max(0, Math.min(selection_state.focused_index + direction, tabs.length - 1));
+  selection_state.focused_index = new_index;
+
+  if (tabs[new_index]) {
+    tabs[new_index].classList.add('focused');
+    tabs[new_index].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    selection_state.current_group_id = tabs[new_index].dataset.groupId;
   }
 }
 
-function toggleFocusedSelection() {
-  const tabs = SelectionState.allTabElements;
-  if (SelectionState.focusedIndex >= 0 && tabs[SelectionState.focusedIndex]) {
-    const tab = tabs[SelectionState.focusedIndex];
-    if (SelectionState.selectedTabs.has(tab)) { SelectionState.selectedTabs.delete(tab); tab.classList.remove('selected'); }
-    else { SelectionState.selectedTabs.add(tab); tab.classList.add('selected'); }
+function toggle_focused_selection() {
+  const tabs = selection_state.all_tab_elements;
+  if (selection_state.focused_index >= 0 && tabs[selection_state.focused_index]) {
+    const tab = tabs[selection_state.focused_index];
+    if (selection_state.selected_tabs.has(tab)) {
+      selection_state.selected_tabs.delete(tab);
+      tab.classList.remove('selected');
+    } else {
+      selection_state.selected_tabs.add(tab);
+      tab.classList.add('selected');
+    }
   }
 }
 
-function clearSelection() {
-  SelectionState.selectedTabs.forEach(tab => tab.classList.remove('selected'));
-  SelectionState.selectedTabs.clear();
-  SelectionState.lastClickedIndex = -1;
+function clear_selection() {
+  selection_state.selected_tabs.forEach(tab => tab.classList.remove('selected'));
+  selection_state.selected_tabs.clear();
+  selection_state.last_clicked_index = -1;
 }
 
-function handleTabClick(e, tabElement, tabIndex, groupId) {
+function handle_tab_click(e, tab_element, tab_index, group_id) {
   if (e.target.classList.contains('tab-delete-button') || e.target.classList.contains('tab-link')) return;
   e.preventDefault();
-  
-  const allTabs = SelectionState.allTabElements;
-  const globalIndex = allTabs.indexOf(tabElement);
-  SelectionState.currentGroupId = groupId;
-  
-  if (e.shiftKey && SelectionState.lastClickedIndex >= 0) {
-    const start = Math.min(SelectionState.lastClickedIndex, globalIndex);
-    const end = Math.max(SelectionState.lastClickedIndex, globalIndex);
+
+  const all_tabs = selection_state.all_tab_elements;
+  const global_index = all_tabs.indexOf(tab_element);
+  selection_state.current_group_id = group_id;
+
+  if (e.shiftKey && selection_state.last_clicked_index >= 0) {
+    const start = Math.min(selection_state.last_clicked_index, global_index);
+    const end = Math.max(selection_state.last_clicked_index, global_index);
     for (let i = start; i <= end; i++) {
-      if (allTabs[i] && allTabs[i].dataset.groupId === groupId) {
-        SelectionState.selectedTabs.add(allTabs[i]);
-        allTabs[i].classList.add('selected');
+      if (all_tabs[i] && all_tabs[i].dataset.groupId === group_id) {
+        selection_state.selected_tabs.add(all_tabs[i]);
+        all_tabs[i].classList.add('selected');
       }
     }
   } else if (e.ctrlKey || e.metaKey) {
-    if (SelectionState.selectedTabs.has(tabElement)) { SelectionState.selectedTabs.delete(tabElement); tabElement.classList.remove('selected'); }
-    else { SelectionState.selectedTabs.add(tabElement); tabElement.classList.add('selected'); }
+    if (selection_state.selected_tabs.has(tab_element)) {
+      selection_state.selected_tabs.delete(tab_element);
+      tab_element.classList.remove('selected');
+    } else {
+      selection_state.selected_tabs.add(tab_element);
+      tab_element.classList.add('selected');
+    }
   } else {
-    clearSelection();
-    SelectionState.selectedTabs.add(tabElement);
-    tabElement.classList.add('selected');
+    clear_selection();
+    selection_state.selected_tabs.add(tab_element);
+    tab_element.classList.add('selected');
   }
-  SelectionState.lastClickedIndex = globalIndex;
+  selection_state.last_clicked_index = global_index;
 }
 
-function softDeleteTab(tabElement, groupId, tabIndex) {
-  tabElement.classList.add('fade-out');
-  const deletion = { type: 'tab', element: tabElement, groupId: groupId, tabIndex: tabIndex, timeoutId: null };
-  const existingIndex = DeleteState.pendingDeletions.findIndex(d => d.element === tabElement);
-  if (existingIndex >= 0) { clearTimeout(DeleteState.pendingDeletions[existingIndex].timeoutId); DeleteState.pendingDeletions.splice(existingIndex, 1); }
-  deletion.timeoutId = setTimeout(() => commitDeletion(deletion), 5000);
-  DeleteState.pendingDeletions.push(deletion);
-  showUndoToast();
+function soft_delete_tab(tab_element, group_id, tab_index) {
+  tab_element.classList.add('fade-out');
+  const deletion = {
+    type: 'tab',
+    element: tab_element,
+    group_id: group_id,
+    tab_index: tab_index,
+    timeout_id: null
+  };
+  const existing_index = delete_state.pending_deletions.findIndex(d => d.element === tab_element);
+  if (existing_index >= 0) {
+    clearTimeout(delete_state.pending_deletions[existing_index].timeout_id);
+    delete_state.pending_deletions.splice(existing_index, 1);
+  }
+  deletion.timeout_id = setTimeout(() => commit_deletion(deletion), 5000);
+  delete_state.pending_deletions.push(deletion);
+  show_undo_toast();
 }
 
-function softDeleteGroup(groupElement, groupId) {
-  groupElement.classList.add('fade-out');
-  const deletion = { type: 'group', element: groupElement, groupId: groupId, timeoutId: null };
-  deletion.timeoutId = setTimeout(() => commitDeletion(deletion), 5000);
-  DeleteState.pendingDeletions.push(deletion);
-  showUndoToast();
+function soft_delete_group(group_element, group_id) {
+  group_element.classList.add('fade-out');
+  const deletion = {
+    type: 'group',
+    element: group_element,
+    group_id: group_id,
+    timeout_id: null
+  };
+  deletion.timeout_id = setTimeout(() => commit_deletion(deletion), 5000);
+  delete_state.pending_deletions.push(deletion);
+  show_undo_toast();
 }
 
-async function commitDeletion(deletion) {
+async function commit_deletion(deletion) {
   try {
-    const groups = await getTabGroups();
-    const sessionKey = await getSessionKey();
+    const groups = await get_tab_groups();
+    const session_key = await get_session_key();
+
     if (deletion.type === 'group') {
-      const updatedGroups = groups.filter(g => g.id !== deletion.groupId);
-      await saveTabGroups(updatedGroups);
+      const updated_groups = groups.filter(g => g.id !== deletion.group_id);
+      await save_tab_groups(updated_groups);
       deletion.element.remove();
-      if (updatedGroups.length === 0) document.getElementById('groups-container').innerHTML = '<div class="empty-state"><p>No saved tabs found.</p></div>';
+      if (updated_groups.length === 0) {
+        document.getElementById('groups-container').innerHTML =
+          '<div class="empty-state"><p>No saved tabs found.</p></div>';
+      }
     } else if (deletion.type === 'tab') {
-      const groupIndex = groups.findIndex(g => g.id === deletion.groupId);
-      if (groupIndex !== -1 && sessionKey) {
-        const groupData = JSON.parse(await decrypt(groups[groupIndex], sessionKey));
-        groupData.tabs.splice(deletion.tabIndex, 1);
-        if (groupData.tabs.length === 0) {
-          groups.splice(groupIndex, 1);
+      const group_index = groups.findIndex(g => g.id === deletion.group_id);
+      if (group_index !== -1 && session_key) {
+        const group_data = JSON.parse(await decrypt(groups[group_index], session_key));
+        group_data.tabs.splice(deletion.tab_index, 1);
+        if (group_data.tabs.length === 0) {
+          groups.splice(group_index, 1);
           deletion.element.closest('.group-card')?.remove();
         } else {
-          const encrypted = await encrypt(JSON.stringify(groupData), sessionKey);
-          groups[groupIndex] = { id: deletion.groupId, iv: encrypted.iv, ciphertext: encrypted.ciphertext };
+          const encrypted = await encrypt(JSON.stringify(group_data), session_key);
+          groups[group_index] = {
+            id: deletion.group_id,
+            iv: encrypted.iv,
+            ciphertext: encrypted.ciphertext
+          };
           deletion.element.remove();
         }
-        await saveTabGroups(groups);
+        await save_tab_groups(groups);
       }
     }
-    const index = DeleteState.pendingDeletions.indexOf(deletion);
-    if (index >= 0) DeleteState.pendingDeletions.splice(index, 1);
-    if (DeleteState.pendingDeletions.length === 0) hideUndoToast();
-  } catch (error) {}
+
+    const index = delete_state.pending_deletions.indexOf(deletion);
+    if (index >= 0) delete_state.pending_deletions.splice(index, 1);
+    if (delete_state.pending_deletions.length === 0) hide_undo_toast();
+  } catch (error) {
+    // deletion failed silently, element stays visible
+  }
 }
 
-function undoAllDeletions() {
-  DeleteState.pendingDeletions.forEach(deletion => {
-    clearTimeout(deletion.timeoutId);
+function undo_all_deletions() {
+  delete_state.pending_deletions.forEach(deletion => {
+    clearTimeout(deletion.timeout_id);
     deletion.element.classList.remove('fade-out');
-    if (deletion.type === 'tab') SelectionState.selectedTabs.delete(deletion.element);
+    if (deletion.type === 'tab') selection_state.selected_tabs.delete(deletion.element);
   });
-  DeleteState.pendingDeletions = [];
-  hideUndoToast();
+  delete_state.pending_deletions = [];
+  hide_undo_toast();
 }
 
-function showUndoToast() {
+function show_undo_toast() {
   const toast = document.getElementById('undo-toast');
-  const undoButton = document.getElementById('undo-button');
-  const timerSpan = document.getElementById('toast-timer');
-  const messageSpan = document.getElementById('toast-message');
-  const count = DeleteState.pendingDeletions.length;
-  messageSpan.textContent = count === 1 ? 'Deleted' : `${count} items deleted`;
-  
+  const undo_button = document.getElementById('undo-button');
+  const timer_span = document.getElementById('toast-timer');
+  const message_span = document.getElementById('toast-message');
+  const count = delete_state.pending_deletions.length;
+  message_span.textContent = count === 1 ? 'Deleted' : `${count} items deleted`;
+
   toast.classList.remove('hidden');
-  const newUndoButton = undoButton.cloneNode(true);
-  undoButton.parentNode.replaceChild(newUndoButton, undoButton);
-  newUndoButton.addEventListener('click', undoAllDeletions);
-  
-  let secondsLeft = 5;
-  timerSpan.textContent = `(${secondsLeft}s)`;
-  if (DeleteState.timerInterval) clearInterval(DeleteState.timerInterval);
-  DeleteState.timerInterval = setInterval(() => {
-    secondsLeft--;
-    if (secondsLeft <= 0) { clearInterval(DeleteState.timerInterval); hideUndoToast(); }
-    else timerSpan.textContent = `(${secondsLeft}s)`;
+  const new_undo_button = undo_button.cloneNode(true);
+  undo_button.parentNode.replaceChild(new_undo_button, undo_button);
+  new_undo_button.addEventListener('click', undo_all_deletions);
+
+  let seconds_left = 5;
+  timer_span.textContent = `(${seconds_left}s)`;
+  if (delete_state.timer_interval) clearInterval(delete_state.timer_interval);
+  delete_state.timer_interval = setInterval(() => {
+    seconds_left--;
+    if (seconds_left <= 0) {
+      clearInterval(delete_state.timer_interval);
+      hide_undo_toast();
+    } else {
+      timer_span.textContent = `(${seconds_left}s)`;
+    }
   }, 1000);
 }
 
-function hideUndoToast() {
+function hide_undo_toast() {
   document.getElementById('undo-toast').classList.add('hidden');
-  if (DeleteState.timerInterval) clearInterval(DeleteState.timerInterval);
+  if (delete_state.timer_interval) clearInterval(delete_state.timer_interval);
 }
 
-// STABILITY UPGRADE: Safe Tab Restoration Batching
-async function restoreTabsSafely(urls, incognito = false) {
+// restore tabs in batches to avoid overwhelming the browser
+async function restore_tabs_batched(urls, incognito = false) {
   if (urls.length === 0) return;
-  
+
   try {
     if (incognito) {
-      const isAllowed = await chrome.extension.isAllowedIncognitoAccess();
-      if (!isAllowed) {
+      const is_allowed = await chrome.extension.isAllowedIncognitoAccess();
+      if (!is_allowed) {
         alert('Private browsing access is not enabled. Please enable "Allow in Incognito" in Chrome extension settings.');
         return;
       }
     }
-    
-    // Create the window with the first URL
-    const newWindow = await chrome.windows.create({ 
-      url: urls[0], 
-      incognito: incognito 
+
+    // create window with the first url
+    const new_window = await chrome.windows.create({
+      url: urls[0],
+      incognito: incognito
     });
 
-    // Open the rest one by one with a tiny delay to prevent crashing
-    for (let i = 1; i < urls.length; i++) {
-      await chrome.tabs.create({ 
-        windowId: newWindow.id, 
-        url: urls[i], 
-        active: false 
-      });
-      // 300ms delay to let the CPU breathe
-      await new Promise(resolve => setTimeout(resolve, 300)); 
+    // batch the remaining urls: create them all without artificial delay
+    const remaining_urls = urls.slice(1);
+    const batch_size = 10;
+
+    for (let i = 0; i < remaining_urls.length; i += batch_size) {
+      const batch = remaining_urls.slice(i, i + batch_size);
+      const create_promises = batch.map(url =>
+        chrome.tabs.create({
+          windowId: new_window.id,
+          url: url,
+          active: false
+        })
+      );
+      await Promise.all(create_promises);
     }
   } catch (error) {
-    console.error('Error in safe restore:', error);
+    console.error('Error in batched restore:', error);
     alert(`Failed to restore some tabs: ${error.message}`);
   }
 }
 
-async function renderPage(key) {
-  const loadingMessage = document.getElementById('loading-message');
-  const groupsContainer = document.getElementById('groups-container');
-  loadingMessage.classList.remove('hidden');
-  groupsContainer.classList.add('hidden');
-  
+// render the page: decrypt all groups in parallel using Promise.all
+async function render_page(key) {
+  const loading_message = document.getElementById('loading-message');
+  const groups_container = document.getElementById('groups-container');
+  loading_message.classList.remove('hidden');
+  groups_container.classList.add('hidden');
+
   try {
-    groupsContainer.innerHTML = '';
-    SelectionState.allTabElements = [];
-    const encryptedGroups = await getTabGroups();
-    
-    if (encryptedGroups.length === 0) {
-      groupsContainer.innerHTML = '<div class="empty-state"><p>No saved tabs found.</p></div>';
-      loadingMessage.classList.add('hidden');
-      groupsContainer.classList.remove('hidden');
+    groups_container.innerHTML = '';
+    selection_state.all_tab_elements = [];
+    const encrypted_groups = await get_tab_groups();
+
+    if (encrypted_groups.length === 0) {
+      groups_container.innerHTML = '<div class="empty-state"><p>No saved tabs found.</p></div>';
+      loading_message.classList.add('hidden');
+      groups_container.classList.remove('hidden');
       return;
     }
-    
-    for (let groupIndex = 0; groupIndex < encryptedGroups.length; groupIndex++) {
-      try {
-        const groupData = JSON.parse(await decrypt(encryptedGroups[groupIndex], key));
-        groupsContainer.appendChild(createGroupElement(encryptedGroups[groupIndex].id, groupData, groupIndex));
-      } catch (error) {}
+
+    // decrypt all groups in parallel for speed
+    const decrypt_promises = encrypted_groups.map(group =>
+      decrypt(group, key).then(plaintext => ({
+        id: group.id,
+        data: JSON.parse(plaintext)
+      })).catch(() => null)
+    );
+
+    const decrypted_results = await Promise.all(decrypt_promises);
+
+    // render groups in original order
+    let group_index = 0;
+    for (const result of decrypted_results) {
+      if (!result) continue;
+      groups_container.appendChild(
+        create_group_element(result.id, result.data, group_index)
+      );
+      group_index++;
     }
-    
-    loadingMessage.classList.add('hidden');
-    groupsContainer.classList.remove('hidden');
+
+    loading_message.classList.add('hidden');
+    groups_container.classList.remove('hidden');
   } catch (error) {
-    loadingMessage.innerHTML = '<p class="error">Error loading saved tabs</p>';
+    loading_message.innerHTML = '<p class="error">Error loading saved tabs</p>';
   }
 }
 
-function createGroupElement(groupId, groupData, groupIndex = 0) {
-  const groupElement = document.createElement('div');
-  groupElement.className = 'group-card';
-  groupElement.dataset.groupId = groupId;
-  groupElement.style.animationDelay = `${groupIndex * 0.1}s`;
-  
-  const date = new Date(groupData.date);
-  const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
-  
+function create_group_element(group_id, group_data, group_index = 0) {
+  const group_element = document.createElement('div');
+  group_element.className = 'group-card';
+  group_element.dataset.groupId = group_id;
+  group_element.style.animationDelay = `${group_index * 0.05}s`;
+
+  const date = new Date(group_data.date);
+  const formatted_date = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+
   const header = document.createElement('div');
   header.className = 'group-header';
   header.innerHTML = `
-    <h3>Saved on ${formattedDate} (${groupData.tabs.length} tabs)</h3>
+    <h3>Saved on ${formatted_date} (${group_data.tabs.length} tabs)</h3>
     <div class="group-actions">
       <button class="restore-button secondary-button">Restore All</button>
-      <button class="restore-private-button private-restore-button">🕶️ Private</button>
+      <button class="restore-private-button private-restore-button">Private</button>
       <button class="export-urls-button secondary-button">Export URLs</button>
       <button class="delete-button">Delete</button>
     </div>
   `;
-  
-  const tabsList = document.createElement('div');
-  tabsList.className = 'tabs-list';
-  
-  groupData.tabs.forEach((tab, tabIndex) => {
-    const tabElement = document.createElement('div');
-    tabElement.className = 'tab-item';
-    tabElement.dataset.groupId = groupId;
-    tabElement.dataset.tabIndex = tabIndex;
-    
-    const favicon = tab.favIconUrl ? `<img src="${tab.favIconUrl}" alt="favicon" class="favicon" onerror="this.style.display='none'">` : '<div class="favicon-placeholder"></div>';
-    tabElement.innerHTML = `${favicon}<a href="${tab.url}" target="_blank" class="tab-link">${tab.title}</a><button class="tab-delete-button" data-tab-index="${tabIndex}">×</button>`;
-    
-    tabElement.addEventListener('click', (e) => handleTabClick(e, tabElement, tabIndex, groupId));
-    tabElement.querySelector('.tab-delete-button').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); softDeleteTab(tabElement, groupId, tabIndex); });
-    
-    tabsList.appendChild(tabElement);
-    SelectionState.allTabElements.push(tabElement);
+
+  const tabs_list = document.createElement('div');
+  tabs_list.className = 'tabs-list';
+
+  group_data.tabs.forEach((tab, tab_index) => {
+    const tab_element = document.createElement('div');
+    tab_element.className = 'tab-item';
+    tab_element.dataset.groupId = group_id;
+    tab_element.dataset.tabIndex = tab_index;
+
+    const favicon = tab.fav_icon_url
+      ? `<img src="${tab.fav_icon_url}" alt="favicon" class="favicon" onerror="this.style.display='none'">`
+      : '<div class="favicon-placeholder"></div>';
+    tab_element.innerHTML =
+      `${favicon}<a href="${tab.url}" target="_blank" class="tab-link">${tab.title}</a>` +
+      `<button class="tab-delete-button" data-tab-index="${tab_index}">x</button>`;
+
+    tab_element.addEventListener('click', (e) => handle_tab_click(e, tab_element, tab_index, group_id));
+    tab_element.querySelector('.tab-delete-button').addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      soft_delete_tab(tab_element, group_id, tab_index);
+    });
+
+    tabs_list.appendChild(tab_element);
+    selection_state.all_tab_elements.push(tab_element);
   });
-  
-  groupElement.appendChild(header);
-  groupElement.appendChild(tabsList);
-  
-  // STABILITY FIX: Hook up the new safe batching restore logic
-  groupElement.querySelector('.restore-button').addEventListener('click', async () => {
-    const urls = groupData.tabs.map(tab => tab.url);
-    if (Settings.alwaysPrivate) {
-      await restoreTabsSafely(urls, true);
-    } else {
-      await restoreTabsSafely(urls, false);
-    }
+
+  group_element.appendChild(header);
+  group_element.appendChild(tabs_list);
+
+  group_element.querySelector('.restore-button').addEventListener('click', async () => {
+    const urls = group_data.tabs.map(tab => tab.url);
+    await restore_tabs_batched(urls, settings.always_private);
   });
-  
-  groupElement.querySelector('.restore-private-button').addEventListener('click', async () => {
-    const urls = groupData.tabs.map(tab => tab.url);
-    await restoreTabsSafely(urls, true);
+
+  group_element.querySelector('.restore-private-button').addEventListener('click', async () => {
+    const urls = group_data.tabs.map(tab => tab.url);
+    await restore_tabs_batched(urls, true);
   });
-  
-  groupElement.querySelector('.export-urls-button').addEventListener('click', async () => {
-    const urlsText = groupData.tabs.map(tab => tab.url).join('\n');
-    const blob = new Blob([urlsText], { type: 'text/plain' });
+
+  group_element.querySelector('.export-urls-button').addEventListener('click', () => {
+    const urls_text = group_data.tabs.map(tab => tab.url).join('\n');
+    const blob = new Blob([urls_text], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `aegis-tab-urls-${new Date(groupData.date).toISOString().split('T')[0]}.txt`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    a.href = url;
+    a.download = `aegis-tab-urls-${new Date(group_data.date).toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   });
-  
-  groupElement.querySelector('.delete-button').addEventListener('click', () => softDeleteGroup(groupElement, groupId));
-  
-  return groupElement;
+
+  group_element.querySelector('.delete-button').addEventListener('click', () => {
+    soft_delete_group(group_element, group_id);
+  });
+
+  return group_element;
+}
+
+// filter visible tabs based on search input
+function filter_tabs_by_search() {
+  const search_input = document.getElementById('search-input');
+  if (!search_input) return;
+  const query = search_input.value.toLowerCase().trim();
+
+  const all_tab_items = document.querySelectorAll('.tab-item');
+  let visible_count = 0;
+
+  all_tab_items.forEach(tab_item => {
+    const tab_link = tab_item.querySelector('.tab-link');
+    if (!tab_link) return;
+    const title_text = tab_link.textContent.toLowerCase();
+    const url_text = tab_link.getAttribute('href')?.toLowerCase() || '';
+    const matches = title_text.includes(query) || url_text.includes(query);
+    tab_item.style.display = matches ? '' : 'none';
+    if (matches) visible_count++;
+  });
+
+  // hide group cards that have no visible tabs
+  document.querySelectorAll('.group-card').forEach(card => {
+    const visible_tabs = card.querySelectorAll('.tab-item:not([style*="display: none"])');
+    card.style.display = visible_tabs.length > 0 ? '' : 'none';
+  });
 }
