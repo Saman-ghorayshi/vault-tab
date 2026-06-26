@@ -176,14 +176,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     search_input.addEventListener('input', filter_tabs_by_search);
   }
 
-  // lock button: clear session key and show password prompt
+  // lock button: clear session key, hide everything, show password prompt
   if (lock_button) {
     lock_button.addEventListener('click', async () => {
       await clear_session_key();
       selection_state.selected_tabs.clear();
       selection_state.all_tab_elements = [];
+
+      // hide everything: groups, header, settings, action panel
       groups_container.innerHTML = '';
       groups_container.classList.add('hidden');
+      document.getElementById('settings-panel')?.classList.add('hidden');
+      document.querySelector('header')?.classList.add('hidden');
+      document.getElementById('shortcuts-help')?.classList.add('hidden');
+      document.getElementById('action-panel')?.classList.add('hidden');
+
+      // show password prompt
+      loading_message.classList.add('hidden');
       password_prompt_view.classList.remove('hidden');
       setTimeout(() => manager_password.focus(), 100);
     });
@@ -196,7 +205,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (session_key) {
     render_page(session_key);
   } else {
+    // locked on initial load: hide everything except the password prompt
     loading_message.classList.add('hidden');
+    document.getElementById('settings-panel')?.classList.add('hidden');
+    document.querySelector('header')?.classList.add('hidden');
+    document.getElementById('shortcuts-help')?.classList.add('hidden');
     password_prompt_view.classList.remove('hidden');
     setTimeout(() => manager_password.focus(), 100);
 
@@ -227,6 +240,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (decrypted_verifier === VERIFIER_STRING) {
           await store_session_key(key);
           password_prompt_view.classList.add('hidden');
+          // restore hidden ui elements after unlock
+          document.querySelector('header')?.classList.remove('hidden');
+          document.getElementById('settings-panel')?.classList.remove('hidden');
+          document.getElementById('shortcuts-help')?.classList.remove('hidden');
           render_page(key);
         } else {
           throw new Error('Decryption failed');
