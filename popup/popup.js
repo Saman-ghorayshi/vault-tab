@@ -209,6 +209,72 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // save only the currently active tab, not all tabs in the window
+  // useful when you just want to bookmark one tab into your encrypted store
+  const save_current_tab_button = document.getElementById('save-current-tab-button');
+  save_current_tab_button.addEventListener('click', async () => {
+    const session_key = await get_session_key();
+    if (!session_key) {
+      locked_view.classList.remove('hidden');
+      unlocked_view.classList.add('hidden');
+      unlock_view.classList.remove('hidden');
+      return;
+    }
+
+    save_current_tab_button.disabled = true;
+    save_current_tab_button.textContent = 'Saving...';
+
+    try {
+      // query the single active tab in the current window
+      const [active_tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!active_tab) {
+        alert('Could not find the active tab.');
+        save_current_tab_button.disabled = false;
+        save_current_tab_button.textContent = 'Save This Tab';
+        return;
+      }
+
+      // fall back to pendingUrl if the tab is still loading
+      const target_url = active_tab.url || active_tab.pendingUrl || '';
+      if (!target_url ||
+          target_url.startsWith('chrome://') ||
+          target_url.startsWith('chrome-extension://') ||
+          target_url.startsWith('about:')) {
+        alert('This tab cannot be saved (system or internal page).');
+        save_current_tab_button.disabled = false;
+        save_current_tab_button.textContent = 'Save This Tab';
+        return;
+      }
+
+      let title = active_tab.title;
+      if (!title || title.trim() === '') {
+        try { title = new URL(target_url).hostname; } catch (e) { title = 'Untitled'; }
+      }
+
+      const tab_data = {
+        date: new Date().toISOString(),
+        tabs: [{ title: title, url: target_url, fav_icon_url: active_tab.favIconUrl || null }]
+      };
+
+      const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
+      const groups = await get_tab_groups();
+      groups.unshift({
+        id: Date.now().toString(),
+        iv: encrypted.iv,
+        ciphertext: encrypted.ciphertext
+      });
+      await save_tab_groups(groups);
+
+      // brief visual feedback before closing
+      save_current_tab_button.textContent = 'Saved!';
+      setTimeout(() => window.close(), 600);
+    } catch (error) {
+      alert(`Failed to save tab: ${error.message}`);
+      save_current_tab_button.disabled = false;
+      save_current_tab_button.textContent = 'Save This Tab';
+    }
+  });
+
   view_tabs_button.addEventListener('click', async () => {
     try {
       await chrome.tabs.create({ url: chrome.runtime.getURL('manager_page/manager.html') });
