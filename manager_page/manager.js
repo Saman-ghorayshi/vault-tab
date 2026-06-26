@@ -3,7 +3,7 @@ import {
   get_tab_groups, save_tab_groups,
   get_session_key, store_session_key, clear_session_key,
   get_session_user, set_session_user,
-  get_settings, save_settings
+  get_settings, save_settings, save_model, load_model
 } from '../common/storage.js';
 import {
   derive_key_from_password, decrypt, encrypt,
@@ -1005,6 +1005,9 @@ async function render_page(key) {
 
     loading_message.classList.add('hidden');
     groups_container.classList.remove('hidden');
+
+    // load the saved neural network model if it exists
+    load_saved_model();
   } catch (error) {
     loading_message.innerHTML = '<p class="error">Error loading saved tabs</p>';
   }
@@ -1264,6 +1267,49 @@ async function rename_session(group_id, new_name, title_el) {
 
 // --- neural network training and analytics ---
 
+// load a previously trained model from storage and apply clustering
+async function load_saved_model() {
+  try {
+    const saved = await load_model();
+    if (!saved) return;
+
+    embedder.deserialize(saved);
+
+    if (embedder.is_trained) {
+      const status_el = document.getElementById('model-status');
+      const vocab_display = document.getElementById('vocab-size-display');
+      const train_button = document.getElementById('train-model-button');
+      const loss_chart = document.getElementById('loss-chart');
+
+      if (status_el) {
+        status_el.textContent = 'Trained (loaded)';
+        status_el.classList.add('trained');
+      }
+      if (vocab_display) vocab_display.textContent = `Vocab: ${embedder.vocab_size}`;
+      if (train_button) train_button.textContent = 'Retrain';
+      if (loss_chart && embedder.loss_history.length > 0) {
+        update_loss_chart(loss_chart, embedder.loss_history);
+      }
+
+      // apply clustering with the loaded model
+      const session_key = await get_session_key();
+      if (session_key) {
+        const encrypted_groups = await get_tab_groups(active_username);
+        const decrypted_groups = [];
+        for (const group of encrypted_groups) {
+          try {
+            const data = JSON.parse(await decrypt(group, session_key));
+            decrypted_groups.push(data);
+          } catch (e) {}
+        }
+        apply_clustering_to_tabs(decrypted_groups);
+      }
+    }
+  } catch (error) {
+    // model load failed, not critical
+  }
+}
+
 // start training the embedding model on all decrypted tab data
 async function start_neural_training() {
   const train_button = document.getElementById('train-model-button');
@@ -1340,6 +1386,9 @@ async function start_neural_training() {
           train_button.textContent = 'Retrain';
         }
         update_loss_chart(loss_chart, embedder.loss_history);
+
+        // persist the trained model to storage
+        save_model(embedder.serialize());
 
         // apply clustering to the rendered tabs
         apply_clustering_to_tabs(decrypted_groups);

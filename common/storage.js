@@ -6,7 +6,8 @@ const STORAGE_KEYS = {
   tab_groups: 'aegis_tab_groups',
   session_key: 'aegis_session_key',
   session_user: 'aegis_session_user',
-  settings: 'aegis_settings'
+  settings: 'aegis_settings',
+  model: 'aegis_model'
 };
 
 // --- migration: convert old single-user format to multi-user format ---
@@ -135,4 +136,22 @@ export async function get_settings() {
 
 export async function save_settings(settings_object) {
   return chrome.storage.local.set({ [STORAGE_KEYS.settings]: settings_object });
+}
+
+// --- model persistence ---
+
+// save the trained neural network model to local storage
+export async function save_model(model_data) {
+  return chrome.storage.local.set({ [STORAGE_KEYS.model]: model_data });
+}
+
+// load the trained model from local storage
+export async function load_model() {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.model);
+  return result[STORAGE_KEYS.model] || null;
+}
+
+// delete the stored model
+export async function clear_model() {
+  return chrome.storage.local.remove(STORAGE_KEYS.model);
 }
