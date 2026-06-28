@@ -932,9 +932,25 @@ function hide_undo_toast() {
   if (delete_state.timer_interval) clearInterval(delete_state.timer_interval);
 }
 
+// URL schemes that chrome.tabs.create will reject
+const UNRESTRICTED_SCHEMES = ['chrome:', 'chrome-extension:', 'about:', 'edge:', 'brave:', 'devtools:'];
+
+function is_restorable_url(url) {
+  if (!url) return false;
+  for (const scheme of UNRESTRICTED_SCHEMES) {
+    if (url.startsWith(scheme)) return false;
+  }
+  return true;
+}
+
 // restore tabs in batches to avoid overwhelming the browser
 async function restore_tabs_batched(urls, incognito = false) {
-  if (urls.length === 0) return;
+  // filter out URLs that Chrome will reject
+  const safe_urls = urls.filter(is_restorable_url);
+  if (safe_urls.length === 0) {
+    alert('No restorable URLs in this group (all are system or internal pages).');
+    return;
+  }
 
   try {
     if (incognito) {
@@ -947,12 +963,12 @@ async function restore_tabs_batched(urls, incognito = false) {
 
     // create window with the first url
     const new_window = await chrome.windows.create({
-      url: urls[0],
+      url: safe_urls[0],
       incognito: incognito
     });
 
-    // batch the remaining urls: create them all without artificial delay
-    const remaining_urls = urls.slice(1);
+    // batch the remaining urls
+    const remaining_urls = safe_urls.slice(1);
     const batch_size = 10;
 
     for (let i = 0; i < remaining_urls.length; i += batch_size) {
@@ -962,6 +978,9 @@ async function restore_tabs_batched(urls, incognito = false) {
           windowId: new_window.id,
           url: url,
           active: false
+        }).catch(err => {
+          console.warn(`Failed to restore tab: ${url}`, err);
+          return null;
         })
       );
       await Promise.all(create_promises);
