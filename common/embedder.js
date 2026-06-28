@@ -365,19 +365,122 @@ class LocalTabEmbedder {
     return this.extract_embedding(indices);
   }
 
-  // fine-tune on new tabs by running a few quick epochs
+  // fine-tune on new tabs using only tokens already in the vocabulary.
+  // does NOT call create_training_dataset to avoid clearing the vocab.
   fine_tune_on_new_tabs(new_tabs, on_complete) {
-    // convert new tabs to a single-group format for the dataset builder
-    let new_group = { tabs: new_tabs };
-    let dataset = this.create_training_dataset([new_group]);
+    if (!this.weights_input || this.vocab_size === 0) {
+      if (on_complete) on_complete();
+      return;
+    }
 
-    if (dataset.length === 0) {
+    // generate skip-gram pairs using only known vocabulary tokens
+    let pairs = [];
+    let window_size = 2;
+
+    for (const tab of new_tabs) {
+      let tokens = tokenize(tab.title + ' ' + (tab.url || ''));
+      let indices = tokens
+        .map(t => this.vocab.get(t))
+        .filter(idx => idx !== undefined);
+
+      for (let i = 0; i < indices.length; i++) {
+        for (let j = Math.max(0, i - window_size); j <= Math.min(indices.length - 1, i + window_size); j++) {
+          if (i === j) continue;
+          pairs.push([indices[i], indices[j]]);
+        }
+      }
+    }
+
+    if (pairs.length === 0) {
       if (on_complete) on_complete();
       return;
     }
 
     // run a small number of epochs at a lower learning rate
-    this.train_epochs(dataset, 3, 0.01, null, on_complete);
+    this.train_epochs(pairs, 3, 0.01, null, on_complete);
+  }
+
+  // suggest a semantic group name for a set of tabs.
+  // computes the centroid embedding of all tabs, then finds the closest
+  // vocabulary token by cosine similarity. returns the token as a
+  // capitalized string, or null if the model is untrained or no match found.
+  suggest_group_name(tabs) {
+    if (!this.is_trained || !this.weights_input || this.vocab_size === 0) {
+      return null;
+    }
+    if (!tabs || tabs.length === 0) return null;
+
+    // tokens to exclude from naming: too generic, too short, or URL noise
+    const stopwords = new Set([
+      'the', 'and', 'for', 'with', 'that', 'this', 'from', 'are', 'was',
+      'has', 'have', 'had', 'not', 'but', 'all', 'can', 'her', 'his',
+      'how', 'its', 'may', 'new', 'now', 'old', 'our', 'out', 'own',
+      'say', 'she', 'too', 'use', 'way', 'who', 'will', 'you', 'your',
+      'www', 'com', 'org', 'net', 'http', 'https', 'html', 'php', 'asp',
+      'index', 'page', 'site', 'web', 'en', 'de', 'fr', 'es', 'it'
+    ]);
+
+    // compute centroid by averaging tab embeddings
+    let centroid = new Float32Array(this.embedding_dim);
+    let valid_count = 0;
+
+    for (const tab of tabs) {
+      const text = (tab.title || '') + ' ' + (tab.url || '');
+      const embedding = this.embed_text(text);
+      // check if the embedding is non-zero (at least one known token)
+      let has_signal = false;
+      for (let d = 0; d < this.embedding_dim; d++) {
+        if (embedding[d] !== 0) { has_signal = true; break; }
+      }
+      if (!has_signal) continue;
+
+      for (let d = 0; d < this.embedding_dim; d++) {
+        centroid[d] += embedding[d];
+      }
+      valid_count++;
+    }
+
+    if (valid_count === 0) return null;
+    for (let d = 0; d < this.embedding_dim; d++) {
+      centroid[d] /= valid_count;
+    }
+
+    // find the vocabulary token closest to the centroid
+    let best_word = null;
+    let best_similarity = -Infinity;
+
+    for (let idx = 0; idx < this.vocab_size; idx++) {
+      const word = this.reverse_vocab[idx];
+
+      // skip low-value tokens
+      if (!word || word.length <= 2) continue;
+      if (stopwords.has(word)) continue;
+      if (/^\d+$/.test(word)) continue;
+
+      const offset = idx * this.embedding_dim;
+      let dot = 0, mag_a = 0, mag_b = 0;
+      for (let d = 0; d < this.embedding_dim; d++) {
+        const a = centroid[d];
+        const b = this.weights_input[offset + d];
+        dot += a * b;
+        mag_a += a * a;
+        mag_b += b * b;
+      }
+      mag_a = Math.sqrt(mag_a);
+      mag_b = Math.sqrt(mag_b);
+      if (mag_a === 0 || mag_b === 0) continue;
+
+      const similarity = dot / (mag_a * mag_b);
+      if (similarity > best_similarity) {
+        best_similarity = similarity;
+        best_word = word;
+      }
+    }
+
+    if (!best_word || best_similarity < 0.1) return null;
+
+    // capitalize first letter
+    return best_word.charAt(0).toUpperCase() + best_word.slice(1);
   }
 
   // serialize the model to a compact json object for storage
