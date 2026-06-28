@@ -95,6 +95,10 @@ export async function delete_user(username) {
   }
   const filtered = users.filter(u => u.username !== username);
   await save_all_users(filtered);
+  // if no users remain, clean up the shared model data
+  if (filtered.length === 0) {
+    clear_model().catch(() => {});
+  }
 }
 
 // IDB marker: when tab_groups are stored in IndexedDB, the user object
