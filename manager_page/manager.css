@@ -974,3 +974,33 @@ button:disabled {
   font-size: 13px;
   line-height: 1.5;
 }
+
+/* tab status badges for unsaveable and local file tabs */
+.tab-link-disabled {
+  color: var(--text-secondary);
+  cursor: default;
+  opacity: 0.6;
+  text-decoration: none;
+}
+
+.tab-status-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.tab-status-system {
+  background-color: rgba(255, 107, 107, 0.15);
+  color: #ff6b6b;
+}
+
+.tab-status-local {
+  background-color: rgba(255, 193, 7, 0.15);
+  color: #ffc107;
+}

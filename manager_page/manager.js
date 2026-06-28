@@ -1126,12 +1126,33 @@ function create_group_element(group_id, group_data, group_index = 0) {
       tab_element.appendChild(fav_placeholder);
     }
 
-    const link_el = document.createElement('a');
-    link_el.href = tab.url;
-    link_el.target = '_blank';
-    link_el.className = 'tab-link';
-    link_el.textContent = tab.title;
-    tab_element.appendChild(link_el);
+    // render the tab title: clickable link for normal tabs, plain text for unsaveable
+    const is_unsaveable = tab.status === 'unsaveable';
+    if (is_unsaveable) {
+      const span_el = document.createElement('span');
+      span_el.className = 'tab-link tab-link-disabled';
+      span_el.textContent = tab.title;
+      tab_element.appendChild(span_el);
+
+      const badge = document.createElement('span');
+      badge.className = 'tab-status-badge tab-status-system';
+      badge.textContent = 'system';
+      tab_element.appendChild(badge);
+    } else {
+      const link_el = document.createElement('a');
+      link_el.href = tab.url;
+      link_el.target = '_blank';
+      link_el.className = 'tab-link';
+      link_el.textContent = tab.title;
+      tab_element.appendChild(link_el);
+
+      if (tab.status === 'local_file') {
+        const badge = document.createElement('span');
+        badge.className = 'tab-status-badge tab-status-local';
+        badge.textContent = 'local';
+        tab_element.appendChild(badge);
+      }
+    }
 
     const del_btn = document.createElement('button');
     del_btn.className = 'tab-delete-button';
