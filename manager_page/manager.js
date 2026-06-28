@@ -476,7 +476,7 @@ async function save_urls_as_group(urls, prefix = 'Imported') {
     tabs: urls.map(url => {
       let hostname = url;
       try { hostname = new URL(url).hostname; } catch (e) {}
-      return { title: `${prefix}: ${hostname}`, url: url, fav_icon_url: null };
+      return { id: crypto.randomUUID(), title: `${prefix}: ${hostname}`, url: url, fav_icon_url: null };
     })
   };
 
@@ -676,7 +676,7 @@ async function open_selected_or_focused() {
 function delete_selected_items() {
   if (selection_state.selected_tabs.size === 0) return;
   selection_state.selected_tabs.forEach((tab) => {
-    soft_delete_tab(tab, tab.dataset.groupId, parseInt(tab.dataset.tabIndex, 10));
+    soft_delete_tab(tab, tab.dataset.groupId, tab.dataset.tabId);
   });
 }
 
@@ -785,13 +785,13 @@ function handle_tab_click(e, tab_element, tab_index, group_id) {
   update_action_panel();
 }
 
-function soft_delete_tab(tab_element, group_id, tab_index) {
+function soft_delete_tab(tab_element, group_id, tab_id) {
   tab_element.classList.add('fade-out');
   const deletion = {
     type: 'tab',
     element: tab_element,
     group_id: group_id,
-    tab_index: tab_index,
+    tab_id: tab_id,
     timeout_id: null
   };
   const existing_index = delete_state.pending_deletions.findIndex(d => d.element === tab_element);
@@ -834,7 +834,15 @@ async function commit_deletion(deletion) {
       const group_index = groups.findIndex(g => g.id === deletion.group_id);
       if (group_index !== -1 && session_key) {
         const group_data = JSON.parse(await decrypt(groups[group_index], session_key));
-        group_data.tabs.splice(deletion.tab_index, 1);
+        const tab_del_idx = group_data.tabs.findIndex(t => t.id === deletion.tab_id);
+        if (tab_del_idx === -1) {
+          deletion.element.remove();
+          const rm_idx = delete_state.pending_deletions.indexOf(deletion);
+          if (rm_idx >= 0) delete_state.pending_deletions.splice(rm_idx, 1);
+          if (delete_state.pending_deletions.length === 0) hide_undo_toast();
+          return;
+        }
+        group_data.tabs.splice(tab_del_idx, 1);
         if (group_data.tabs.length === 0) {
           groups.splice(group_index, 1);
           deletion.element.closest('.group-card')?.remove();
@@ -993,6 +1001,32 @@ async function render_page(key) {
 
     const decrypted_results = await Promise.all(decrypt_promises);
 
+    // backfill stable tab IDs for legacy data that lacks them
+    const groups_needing_resave = new Set();
+    for (let i = 0; i < decrypted_results.length; i++) {
+      const result = decrypted_results[i];
+      if (!result) continue;
+      for (const tab of result.data.tabs) {
+        if (!tab.id) {
+          tab.id = crypto.randomUUID();
+          groups_needing_resave.add(i);
+        }
+      }
+    }
+    if (groups_needing_resave.size > 0) {
+      try {
+        const updated_groups = encrypted_groups.slice();
+        for (const idx of groups_needing_resave) {
+          const r = decrypted_results[idx];
+          const re_enc = await encrypt(JSON.stringify(r.data), key);
+          updated_groups[idx] = { id: r.id, iv: re_enc.iv, ciphertext: re_enc.ciphertext };
+        }
+        await save_tab_groups(active_username, updated_groups);
+      } catch (_) {
+        // backfill persist failed; IDs still in memory for this session
+      }
+    }
+
     // render groups in original order
     let group_index = 0;
     for (const result of decrypted_results) {
@@ -1025,18 +1059,24 @@ function create_group_element(group_id, group_data, group_index = 0) {
   const header = document.createElement('div');
   header.className = 'group-header';
   const display_name = group_data.name || `Saved on ${formatted_date}`;
-  header.innerHTML = `
-    <h3 class="group-title" title="Double-click to rename">${display_name} (${group_data.tabs.length} tabs)</h3>
-    <div class="group-actions">
-      <button class="restore-button secondary-button">Restore All</button>
-      <button class="restore-private-button private-restore-button">Private</button>
-      <button class="export-urls-button secondary-button">Export URLs</button>
-      <button class="delete-button">Delete</button>
-    </div>
-  `;
+
+  const title_el = document.createElement('h3');
+  title_el.className = 'group-title';
+  title_el.title = 'Double-click to rename';
+  title_el.textContent = `${display_name} (${group_data.tabs.length} tabs)`;
+
+  const actions_div = document.createElement('div');
+  actions_div.className = 'group-actions';
+  actions_div.innerHTML =
+    '<button class="restore-button secondary-button">Restore All</button>' +
+    '<button class="restore-private-button private-restore-button">Private</button>' +
+    '<button class="export-urls-button secondary-button">Export URLs</button>' +
+    '<button class="delete-button">Delete</button>';
+
+  header.appendChild(title_el);
+  header.appendChild(actions_div);
 
   // double-click the title to rename the session
-  const title_el = header.querySelector('.group-title');
   title_el.addEventListener('dblclick', () => {
     const new_name = prompt('Rename this session:', display_name);
     if (new_name && new_name.trim()) {
@@ -1051,21 +1091,39 @@ function create_group_element(group_id, group_data, group_index = 0) {
     const tab_element = document.createElement('div');
     tab_element.className = 'tab-item';
     tab_element.dataset.groupId = group_id;
-    tab_element.dataset.tabIndex = tab_index;
+    tab_element.dataset.tabId = tab.id || '';
     tab_element.draggable = true;
 
-    const favicon = tab.fav_icon_url
-      ? `<img src="${tab.fav_icon_url}" alt="favicon" class="favicon" onerror="this.style.display='none'">`
-      : '<div class="favicon-placeholder"></div>';
-    tab_element.innerHTML =
-      `${favicon}<a href="${tab.url}" target="_blank" class="tab-link">${tab.title}</a>` +
-      `<button class="tab-delete-button" data-tab-index="${tab_index}">x</button>`;
+    if (tab.fav_icon_url) {
+      const fav_img = document.createElement('img');
+      fav_img.src = tab.fav_icon_url;
+      fav_img.alt = 'favicon';
+      fav_img.className = 'favicon';
+      fav_img.onerror = function () { this.style.display = 'none'; };
+      tab_element.appendChild(fav_img);
+    } else {
+      const fav_placeholder = document.createElement('div');
+      fav_placeholder.className = 'favicon-placeholder';
+      tab_element.appendChild(fav_placeholder);
+    }
+
+    const link_el = document.createElement('a');
+    link_el.href = tab.url;
+    link_el.target = '_blank';
+    link_el.className = 'tab-link';
+    link_el.textContent = tab.title;
+    tab_element.appendChild(link_el);
+
+    const del_btn = document.createElement('button');
+    del_btn.className = 'tab-delete-button';
+    del_btn.textContent = 'x';
+    tab_element.appendChild(del_btn);
 
     tab_element.addEventListener('click', (e) => handle_tab_click(e, tab_element, tab_index, group_id));
-    tab_element.querySelector('.tab-delete-button').addEventListener('click', (e) => {
+    del_btn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      soft_delete_tab(tab_element, group_id, tab_index);
+      soft_delete_tab(tab_element, group_id, tab.id);
     });
 
     // drag-and-drop reordering within the same group
@@ -1202,13 +1260,11 @@ async function persist_tab_reorder(group_id, tabs_list_element) {
     const tab_elements = tabs_list_element.querySelectorAll('.tab-item');
     const reordered_tabs = [];
 
-    // read the links from each dom element in the new order
-    // and match them back to the original tab data by url
+    // match dom elements to tab data by stable ID
     tab_elements.forEach(el => {
-      const link = el.querySelector('.tab-link');
-      if (link) {
-        const url = link.getAttribute('href');
-        const match = group_data.tabs.find(t => t.url === url);
+      const tid = el.dataset.tabId;
+      if (tid) {
+        const match = group_data.tabs.find(t => t.id === tid);
         if (match) reordered_tabs.push(match);
       }
     });
@@ -1224,10 +1280,6 @@ async function persist_tab_reorder(group_id, tabs_list_element) {
     };
     await save_tab_groups(active_username, groups);
 
-    // update the tabIndex attributes to reflect the new order
-    tab_elements.forEach((el, i) => {
-      el.dataset.tabIndex = i;
-    });
 
     // rebuild the all_tab_elements array for keyboard navigation
     selection_state.all_tab_elements = [...document.querySelectorAll('.tab-item')];
