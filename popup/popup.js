@@ -210,40 +210,56 @@ document.addEventListener('DOMContentLoaded', async () => {
     save_tabs_button.textContent = 'Saving...';
 
     try {
-      const all_tabs = await chrome.tabs.query({ currentWindow: true });
+      const all_tabs = await chrome.tabs.query({ currentWindow: true }) || [];
       const manager_url = chrome.runtime.getURL('manager_page/manager.html');
 
       const tabs_to_save = [];
       const tab_ids_to_remove = [];
 
       for (let i = 0; i < all_tabs.length; i++) {
-        const tab = all_tabs[i];
+        try {
+          const tab = all_tabs[i];
 
-        // fall back to pendingUrl if url is empty (tab still loading or just pasted)
-        const target_url = tab.url || tab.pendingUrl || '';
+          // fall back to pendingUrl if url is empty (tab still loading or just pasted)
+          const target_url = tab.url || tab.pendingUrl || '';
 
-        // skip empty, system, and extension urls
-        if (!target_url ||
-            target_url.startsWith('chrome://') ||
-            target_url.startsWith('chrome-extension://') ||
-            target_url.startsWith('about:') ||
-            target_url.startsWith('edge://') ||
-            target_url.startsWith('about:blank')) {
+          // skip completely empty tabs and the manager page itself
+          if (!target_url || target_url === manager_url) continue;
+
+          // determine saveable status
+          let status = 'ok';
+          if (target_url.startsWith('chrome://') ||
+              target_url.startsWith('chrome-extension://') ||
+              target_url.startsWith('about:') ||
+              target_url.startsWith('edge://') ||
+              target_url.startsWith('devtools://') ||
+              target_url.startsWith('brave://')) {
+            status = 'unsaveable';
+          } else if (target_url.startsWith('file://')) {
+            status = 'local_file';
+          }
+
+          // use title from tab, or derive from url, or fallback placeholder
+          let title = tab.title;
+          if (!title || title.trim() === '') {
+            try { title = new URL(target_url).hostname; } catch (e) { title = 'Untitled'; }
+          }
+
+          tabs_to_save.push({
+            id: crypto.randomUUID(),
+            title: title,
+            url: target_url,
+            fav_icon_url: tab.favIconUrl || null,
+            status: status
+          });
+          // only close tabs that are actually restorable
+          if (status === 'ok') {
+            tab_ids_to_remove.push(tab.id);
+          }
+        } catch (per_tab_err) {
+          // one bad tab must not abort the entire save
           continue;
         }
-
-        // use title from tab, or derive from url, or fallback placeholder
-        let title = tab.title;
-        if (!title || title.trim() === '') {
-          try { title = new URL(target_url).hostname; } catch (e) { title = 'Untitled'; }
-        }
-
-        tabs_to_save.push({
-          title: title,
-          url: target_url,
-          fav_icon_url: tab.favIconUrl || null
-        });
-        tab_ids_to_remove.push(tab.id);
       }
 
       if (tabs_to_save.length === 0) {
@@ -258,6 +274,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         date: new Date().toISOString(),
         tabs: tabs_to_save
       };
+
+      // AI semantic auto-naming: use the trained embedder to suggest a group name
+      try {
+        const saved_model = await load_model();
+        if (saved_model && saved_model.is_trained) {
+          const { LocalTabEmbedder } = await import(
+            chrome.runtime.getURL('common/embedder.js')
+          );
+          const model = new LocalTabEmbedder();
+          model.deserialize(saved_model);
+          const suggested_name = model.suggest_group_name(tabs_to_save);
+          if (suggested_name) {
+            tab_data.name = suggested_name;
+          }
+        }
+      } catch (_) {
+        // auto-naming failed, fall back to date-based default
+      }
 
       const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
       const groups = await get_tab_groups(session_user);
@@ -310,14 +344,21 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       const target_url = active_tab.url || active_tab.pendingUrl || '';
-      if (!target_url ||
-          target_url.startsWith('chrome://') ||
-          target_url.startsWith('chrome-extension://') ||
-          target_url.startsWith('about:')) {
-        alert('This tab cannot be saved (system or internal page).');
+
+      let status = 'ok';
+      if (!target_url) {
+        alert('This tab has no URL to save.');
         save_current_tab_button.disabled = false;
         save_current_tab_button.textContent = 'Save This Tab';
         return;
+      }
+      if (target_url.startsWith('chrome://') ||
+          target_url.startsWith('chrome-extension://') ||
+          target_url.startsWith('about:') ||
+          target_url.startsWith('edge://')) {
+        status = 'unsaveable';
+      } else if (target_url.startsWith('file://')) {
+        status = 'local_file';
       }
 
       let title = active_tab.title;
@@ -327,7 +368,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const tab_data = {
         date: new Date().toISOString(),
-        tabs: [{ title: title, url: target_url, fav_icon_url: active_tab.favIconUrl || null }]
+        tabs: [{
+          id: crypto.randomUUID(),
+          title: title,
+          url: target_url,
+          fav_icon_url: active_tab.favIconUrl || null,
+          status: status
+        }]
       };
 
       const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
