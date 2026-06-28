@@ -1,4 +1,5 @@
 import { export_key, import_key } from './crypto.js';
+import { idb_put_chunked, idb_get_chunked, idb_delete_chunked } from './idb_storage.js';
 
 // storage keys
 const STORAGE_KEYS = {
@@ -15,13 +16,24 @@ const STORAGE_KEYS = {
 // the new format stores an array of users in aegis_users.
 // each user has their own username, salt, verifier, and tab groups.
 // this runs once on first load after the update.
+// cached so subsequent calls skip the storage round-trip entirely.
+let _migration_done = false;
+
 async function migrate_old_format() {
+  if (_migration_done) return;
+
   const old_data = await chrome.storage.local.get('aegis_credentials');
-  if (!old_data.aegis_credentials) return;
+  if (!old_data.aegis_credentials) {
+    _migration_done = true;
+    return;
+  }
 
   // check if migration was already done
   const existing_users = await chrome.storage.local.get(STORAGE_KEYS.users);
-  if (existing_users[STORAGE_KEYS.users]) return;
+  if (existing_users[STORAGE_KEYS.users]) {
+    _migration_done = true;
+    return;
+  }
 
   // convert the old credentials to the new user format
   const old_creds = old_data.aegis_credentials;
@@ -37,6 +49,7 @@ async function migrate_old_format() {
   // clear old keys to avoid confusion
   await chrome.storage.local.remove('aegis_credentials');
   await chrome.storage.local.remove('aegis_tab_groups');
+  _migration_done = true;
 }
 
 // --- internal helper: get raw tab groups (not tied to a user) ---
@@ -79,12 +92,25 @@ export async function delete_user(username) {
   await save_all_users(filtered);
 }
 
-// --- per-user tab groups ---
+// IDB marker: when tab_groups are stored in IndexedDB, the user object
+// holds this sentinel instead of the actual array.
+const IDB_MARKER = '__aegis_idb__';
 
 export async function get_tab_groups(username) {
   const user = await get_user_by_username(username);
   if (!user) return [];
-  // if the user has tab_groups stored on the user object, use those
+
+  // check if groups are in IndexedDB
+  if (user.tab_groups === IDB_MARKER) {
+    try {
+      const json_str = await idb_get_chunked(`tabgroups_${username}`);
+      if (json_str) return JSON.parse(json_str);
+    } catch (_) {
+      // IDB read failed, return empty
+    }
+    return [];
+  }
+
   if (user.tab_groups) return user.tab_groups;
   // fallback: check the old global storage (for migrated users without groups yet)
   return await get_raw_tab_groups();
@@ -92,9 +118,32 @@ export async function get_tab_groups(username) {
 
 export async function save_tab_groups(username, tab_groups_array) {
   const user = await get_user_by_username(username);
-  if (!user) return;
-  user.tab_groups = tab_groups_array;
-  return save_user(user);
+  if (!user) {
+    throw new Error(`save_tab_groups: user "${username}" not found. Data not saved.`);
+  }
+
+  // attempt chrome.storage.local first
+  try {
+    user.tab_groups = tab_groups_array;
+    await save_user(user);
+
+    // if a previous save had fallen back to IDB, clean up the orphaned IDB data
+    idb_delete_chunked(`tabgroups_${username}`).catch(() => {});
+    return;
+  } catch (err) {
+    // chrome.storage.local failed (quota or write error)
+    // fall through to IndexedDB
+  }
+
+  // IndexedDB failover: store groups in IDB, put a marker on the user object
+  try {
+    const json_str = JSON.stringify(tab_groups_array);
+    await idb_put_chunked(`tabgroups_${username}`, json_str);
+    user.tab_groups = IDB_MARKER;
+    await save_user(user);
+  } catch (idb_err) {
+    throw new Error(`save_tab_groups: both chrome.storage and IndexedDB failed. ${idb_err.message}`);
+  }
 }
 
 // --- in-memory session storage ---
@@ -140,18 +189,38 @@ export async function save_settings(settings_object) {
 
 // --- model persistence ---
 
-// save the trained neural network model to local storage
+// save the trained neural network model to local storage.
+// falls back to IndexedDB if chrome.storage.local fails (model can be large).
 export async function save_model(model_data) {
-  return chrome.storage.local.set({ [STORAGE_KEYS.model]: model_data });
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEYS.model]: model_data });
+    idb_delete_chunked('aegis_model').catch(() => {});
+  } catch (_) {
+    // chrome.storage.local failed, fall back to IDB
+    const json_str = JSON.stringify(model_data);
+    await idb_put_chunked('aegis_model', json_str);
+    // remove the key from chrome.storage to avoid partial state
+    await chrome.storage.local.remove(STORAGE_KEYS.model).catch(() => {});
+  }
 }
 
-// load the trained model from local storage
+// load the trained model from local storage or IndexedDB.
 export async function load_model() {
   const result = await chrome.storage.local.get(STORAGE_KEYS.model);
-  return result[STORAGE_KEYS.model] || null;
+  if (result[STORAGE_KEYS.model]) return result[STORAGE_KEYS.model];
+
+  // check IndexedDB fallback
+  try {
+    const json_str = await idb_get_chunked('aegis_model');
+    if (json_str) return JSON.parse(json_str);
+  } catch (_) {
+    // IDB read failed
+  }
+  return null;
 }
 
-// delete the stored model
+// delete the stored model from both storage backends.
 export async function clear_model() {
-  return chrome.storage.local.remove(STORAGE_KEYS.model);
+  await chrome.storage.local.remove(STORAGE_KEYS.model).catch(() => {});
+  await idb_delete_chunked('aegis_model').catch(() => {});
 }
