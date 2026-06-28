@@ -482,7 +482,7 @@ async function save_urls_as_group(urls, prefix = 'Imported') {
 
   const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
   const new_group = {
-    id: Date.now().toString(),
+    id: crypto.randomUUID(),
     iv: encrypted.iv,
     ciphertext: encrypted.ciphertext
   };

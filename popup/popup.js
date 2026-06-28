@@ -296,7 +296,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
       const groups = await get_tab_groups(session_user);
       groups.unshift({
-        id: Date.now().toString(),
+        id: crypto.randomUUID(),
         iv: encrypted.iv,
         ciphertext: encrypted.ciphertext
       });
@@ -380,7 +380,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
       const groups = await get_tab_groups(session_user);
       groups.unshift({
-        id: Date.now().toString(),
+        id: crypto.randomUUID(),
         iv: encrypted.iv,
         ciphertext: encrypted.ciphertext
       });
