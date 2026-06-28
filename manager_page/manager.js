@@ -515,11 +515,8 @@ function setup_action_panel() {
       const selected = get_selected_tab_elements();
       const urls = [];
       selected.forEach(el => {
-        const link = el.querySelector('.tab-link');
-        if (link) {
-          const href = link.getAttribute('href');
-          if (href) urls.push(href);
-        }
+        const url = el.dataset.url;
+        if (url) urls.push(url);
       });
       if (urls.length > 0) {
         await restore_tabs_batched(urls, settings.always_private);
@@ -650,21 +647,15 @@ async function open_selected_or_focused() {
 
   if (selected.length > 0) {
     selected.forEach(el => {
-      const link = el.querySelector('.tab-link');
-      if (link) {
-        const href = link.getAttribute('href');
-        if (href) urls.push(href);
-      }
+      const url = el.dataset.url;
+      if (url) urls.push(url);
     });
   } else {
     // fallback: open the focused tab
     const tabs = selection_state.all_tab_elements;
     if (selection_state.focused_index >= 0 && tabs[selection_state.focused_index]) {
-      const link = tabs[selection_state.focused_index].querySelector('.tab-link');
-      if (link) {
-        const href = link.getAttribute('href');
-        if (href) urls.push(href);
-      }
+      const url = tabs[selection_state.focused_index].dataset.url;
+      if (url) urls.push(url);
     }
   }
 
