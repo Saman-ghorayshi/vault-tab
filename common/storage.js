@@ -88,6 +88,11 @@ export async function save_user(user_object) {
 
 export async function delete_user(username) {
   const users = await get_all_users();
+  const target = users.find(u => u.username === username);
+  // clean up any IDB-stored tab groups before removing the user record
+  if (target && target.tab_groups === IDB_MARKER) {
+    idb_delete_chunked(`tabgroups_${username}`).catch(() => {});
+  }
   const filtered = users.filter(u => u.username !== username);
   await save_all_users(filtered);
 }
