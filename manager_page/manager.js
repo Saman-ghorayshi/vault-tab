@@ -1111,6 +1111,7 @@ function create_group_element(group_id, group_data, group_index = 0) {
     tab_element.className = 'tab-item';
     tab_element.dataset.groupId = group_id;
     tab_element.dataset.tabId = tab.id || '';
+    tab_element.dataset.url = tab.url || '';
     tab_element.draggable = true;
 
     if (tab.fav_icon_url) {
@@ -1271,7 +1272,7 @@ function filter_tabs_by_search() {
     const tab_link = tab_item.querySelector('.tab-link');
     if (!tab_link) return;
     const title_text = tab_link.textContent.toLowerCase();
-    const url_text = tab_link.getAttribute('href')?.toLowerCase() || '';
+    const url_text = (tab_item.dataset.url || '').toLowerCase();
     const matches = title_text.includes(query) || url_text.includes(query);
     tab_item.style.display = matches ? '' : 'none';
     if (matches) visible_count++;
