@@ -20,11 +20,15 @@ function is_unsaveable_url(url) {
 }
 
 // create the context menu item when the extension is installed
+// onInstalled fires on install AND on update, so remove any existing
+// item first to avoid the duplicate id error on browser restart
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: 'aegis-save-current-tab',
-    title: 'Save to Aegis Tab',
-    contexts: ['page', 'link']
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: 'aegis-save-current-tab',
+      title: 'Save to Aegis Tab',
+      contexts: ['page', 'link']
+    });
   });
 });
 
@@ -58,7 +62,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       status = 'local_file';
     }
 
-    let title = info.linkUrl ? info.linkUrl : tab.title;
+    let title = info.linkUrl ? (tab.title || '') : tab.title;
     if (!title || title.trim() === '') {
       try { title = new URL(target_url).hostname; } catch (e) { title = 'Untitled'; }
     }
