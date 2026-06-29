@@ -355,7 +355,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (target_url.startsWith('chrome://') ||
           target_url.startsWith('chrome-extension://') ||
           target_url.startsWith('about:') ||
-          target_url.startsWith('edge://')) {
+          target_url.startsWith('edge://') ||
+          target_url.startsWith('brave://') ||
+          target_url.startsWith('devtools://')) {
         status = 'unsaveable';
       } else if (target_url.startsWith('file://')) {
         status = 'local_file';
