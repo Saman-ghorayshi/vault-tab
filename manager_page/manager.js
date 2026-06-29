@@ -476,7 +476,13 @@ async function save_urls_as_group(urls, prefix = 'Imported') {
     tabs: urls.map(url => {
       let hostname = url;
       try { hostname = new URL(url).hostname; } catch (e) {}
-      return { id: crypto.randomUUID(), title: `${prefix}: ${hostname}`, url: url, fav_icon_url: null };
+      return {
+        id: crypto.randomUUID(),
+        title: `${prefix}: ${hostname}`,
+        url: url,
+        fav_icon_url: null,
+        status: 'ok'
+      };
     })
   };
 
