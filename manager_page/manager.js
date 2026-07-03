@@ -66,6 +66,17 @@ const drag_state = {
   dragged_group_id: null
 };
 
+// semantic search reorders the dom for visual ranking.
+// to keep the user's drag-and-drop order safe, we snapshot the original
+// tab and group-card order before the first semantic reorder, and restore it
+// when the search is cleared, the toggle is flipped off, or the page re-renders.
+// order_saved is false when no snapshot is held.
+const search_state = {
+  order_saved: false,
+  tab_order: [],   // array of { parentId, tabId }
+  group_order: []   // array of groupIds in original container order
+};
+
 document.addEventListener('DOMContentLoaded', async () => {
   const loading_message = document.getElementById('loading-message');
   const password_prompt_view = document.getElementById('password-prompt-view');
@@ -261,12 +272,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  // flipping the semantic toggle should immediately re-run the search using the
+  // new mode, otherwise a stale semantic reorder would linger until the user
+  // types again. turning it off falls back to text search, which restores order.
+  const semantic_search_toggle = document.getElementById('semantic-search-toggle');
+  if (semantic_search_toggle) {
+    semantic_search_toggle.addEventListener('change', () => {
+      if (semantic_search_toggle.checked && embedder.is_trained && search_input) {
+        semantic_search_tabs(search_input.value);
+      } else if (search_input) {
+        filter_tabs_by_search();
+      }
+    });
+  }
+
   // lock button: clear session key, hide everything, show password prompt
   if (lock_button) {
     lock_button.addEventListener('click', async () => {
       await clear_session_key();
       selection_state.selected_tabs.clear();
       selection_state.all_tab_elements = [];
+
+      // clear any semantic search order snapshot so the lock screen
+      // does not hold stale dom references across a future render.
+      search_state.order_saved = false;
+      search_state.tab_order = [];
+      search_state.group_order = [];
 
       // hide everything: groups, header, settings, action panel
       groups_container.innerHTML = '';
@@ -1039,6 +1070,13 @@ async function render_page(key) {
   try {
     groups_container.innerHTML = '';
     selection_state.all_tab_elements = [];
+
+    // discard any semantic search order snapshot — the old dom nodes
+    // are being destroyed by the innerHTML clear above.
+    search_state.order_saved = false;
+    search_state.tab_order = [];
+    search_state.group_order = [];
+
     const encrypted_groups = await get_tab_groups(active_username);
 
     if (encrypted_groups.length === 0) {
@@ -1143,6 +1181,9 @@ function create_group_element(group_id, group_data, group_index = 0) {
 
   const tabs_list = document.createElement('div');
   tabs_list.className = 'tabs-list';
+  // a stable, group-scoped id so semantic search can snapshot and restore
+  // the original tab order without holding dom references across calls.
+  tabs_list.id = `tabs-list-${group_id}`;
 
   group_data.tabs.forEach((tab, tab_index) => {
     const tab_element = document.createElement('div');
@@ -1297,8 +1338,48 @@ function create_group_element(group_id, group_data, group_index = 0) {
   return group_element;
 }
 
+// restore the original dom order of tabs and group cards that semantic search
+// may have shuffled. only runs if a snapshot was saved. clears the snapshot after
+// restoring so a subsequent semantic search starts fresh. also clears any
+// similarity tooltips semantic search wrote onto tabs.
+function restore_search_order() {
+  if (!search_state.order_saved) return;
+
+  // put each tab back into the order and parent it was in before the reorder.
+  // rebuilding from the snapshot rather than sorting avoids depending on any
+  // state the reorder may have left behind.
+  for (const entry of search_state.tab_order) {
+    const parent = document.getElementById(entry.parent_id);
+    const tab = parent?.querySelector(`.tab-item[data-tab-id="${entry.tab_id}"]`);
+    if (tab) parent.appendChild(tab);
+  }
+
+  // put group cards back into the container in their original order.
+  const container = document.getElementById('groups-container');
+  if (container) {
+    for (const gid of search_state.group_order) {
+      const card = container.querySelector(`.group-card[data-group-id="${gid}"]`);
+      if (card) container.appendChild(card);
+    }
+  }
+
+  // clear similarity tooltips semantic search may have written.
+  document.querySelectorAll('.tab-item').forEach(el => {
+    if (el.title && el.title.startsWith('Similarity:')) el.removeAttribute('title');
+  });
+
+  search_state.order_saved = false;
+  search_state.tab_order = [];
+  search_state.group_order = [];
+}
+
 // filter visible tabs based on search input
 function filter_tabs_by_search() {
+  // semantic search shuffles the dom; restoring first keeps the user's real
+  // order intact whenever we fall back to plain text filtering (cleared query
+  // or toggle flipped off).
+  restore_search_order();
+
   const search_input = document.getElementById('search-input');
   if (!search_input) return;
   const query = search_input.value.toLowerCase().trim();
@@ -1596,7 +1677,10 @@ function apply_clustering_to_tabs(decrypted_groups) {
 }
 
 // semantic search: rank tabs by cosine similarity to the query
-// uses the trained embedding model instead of simple text matching
+// uses the trained embedding model instead of simple text matching.
+// the dom reorder it performs is visual only and is never persisted; the
+// original order is snapshotted in search_state so filter_tabs_by_search can
+// restore it when the query is cleared or the toggle is flipped off.
 function semantic_search_tabs(query) {
   if (!embedder.is_trained || !query.trim()) {
     // fall back to regular search if model is not trained
@@ -1606,6 +1690,23 @@ function semantic_search_tabs(query) {
 
   const query_embedding = embedder.embed_text(query);
   const tab_elements = document.querySelectorAll('.tab-item');
+
+  // snapshot the current tab and group-card order on the first semantic pass
+  // after a render, so we can restore it later. we do this before any reorder.
+  if (!search_state.order_saved) {
+    search_state.tab_order = [];
+    tab_elements.forEach(el => {
+      const parent = el.parentElement;
+      if (parent && el.dataset.tabId) {
+        search_state.tab_order.push({ parent_id: parent.id, tab_id: el.dataset.tabId });
+      }
+    });
+    search_state.group_order = [];
+    document.querySelectorAll('.group-card').forEach(card => {
+      if (card.dataset.groupId) search_state.group_order.push(card.dataset.groupId);
+    });
+    search_state.order_saved = true;
+  }
 
   // collect tab data and compute similarities
   const tab_scores = [];
@@ -1621,25 +1722,51 @@ function semantic_search_tabs(query) {
   // sort all tabs by similarity score descending
   tab_scores.sort((a, b) => b.score - a.score);
 
-  // reorder the dom: move higher-scoring tabs to the top of their groups
+  // collect the unique group cards in score order (best group first).
+  // build a list of { card, container } so we can re-insert them in order.
+  const ordered_groups = [];
   const groups_seen = new Set();
   tab_scores.forEach(item => {
     const group_card = item.element.closest('.group-card');
     if (group_card && !groups_seen.has(group_card)) {
       groups_seen.add(group_card);
-      // move the group card to the top of the container
-      const container = group_card.parentElement;
-      container.insertBefore(group_card, container.firstChild);
+      ordered_groups.push({ card: group_card, container: group_card.parentElement });
     }
-    // move the tab to the top of its group
-    const tabs_list = item.element.parentElement;
-    if (tabs_list) {
-      tabs_list.insertBefore(item.element, tabs_list.firstChild);
-    }
-    // show all tabs (semantic search shows all, just reordered)
+  });
+
+  // re-insert group cards so the best group ends up at the top of the container.
+  // ordered_groups is best-first, so appending best first moves it to the end,
+  // then each subsequent (worse) group is appended after it. because appendChild
+  // moves an existing child instead of duplicating, the final order is best-first.
+  for (let i = 0; i < ordered_groups.length; i++) {
+    const { card, container } = ordered_groups[i];
+    if (container) container.appendChild(card);
+  }
+
+  // reorder tabs within their groups by score, best first. group tabs by their
+  // parent element first to avoid touching unrelated lists.
+  const by_parent = new Map();
+  tab_scores.forEach(item => {
+    const parent = item.element.parentElement;
+    if (!parent) return;
+    if (!by_parent.has(parent)) by_parent.set(parent, []);
+    by_parent.get(parent).push(item.element);
+  });
+  // tab_scores is best-first per group, so appending best first lands it at
+  // the top of the list once all moves are done.
+  by_parent.forEach((els, parent) => {
+    for (let i = 0; i < els.length; i++) parent.appendChild(els[i]);
+  });
+
+  // show all tabs and tag them with their similarity score. only set the tooltip
+  // when the score is positive so near-zero matches don't show misleading "0.0%".
+  tab_scores.forEach(item => {
     item.element.style.display = '';
-    // highlight score on hover via title
-    item.element.title = `Similarity: ${(item.score * 100).toFixed(1)}%`;
+    if (item.score > 0) {
+      item.element.title = `Similarity: ${(item.score * 100).toFixed(1)}%`;
+    } else {
+      item.element.removeAttribute('title');
+    }
   });
 
   // show all group cards
