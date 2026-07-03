@@ -2,7 +2,7 @@ import {
   get_all_users, save_user, get_user_by_username,
   get_tab_groups, save_tab_groups,
   get_session_key, store_session_key, set_session_user, get_session_user,
-  load_model, save_model
+  load_model
 } from '../common/storage.js';
 import {
   generate_salt, derive_key_from_password, encrypt, decrypt,
@@ -290,9 +290,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
       await save_tab_groups(session_user, groups);
 
-      // if the neural model is already trained, fine-tune it on the new tabs
-      fine_tune_model(tabs_to_save);
-
       // open the manager page, then close the saved tabs
       const manager_tab = await chrome.tabs.create({ url: manager_url });
       const final_ids_to_remove = tab_ids_to_remove.filter(id => id !== manager_tab.id);
@@ -407,31 +404,5 @@ function check_password_strength(password) {
     return { label: 'Weak', color: '#f44336', percentage: 30 };
   } else {
     return { label: 'Too short', color: '#f44336', percentage: 10 };
-  }
-}
-
-// fine-tune the neural embedding model on newly saved tabs
-// loads the model from storage, runs a few quick epochs, saves it back
-// this runs asynchronously and does not block the popup from closing
-async function fine_tune_model(new_tabs) {
-  try {
-    const saved_model = await load_model();
-    if (!saved_model || !saved_model.is_trained) return;
-
-    // dynamically import the embedder module
-    const [{ LocalTabEmbedder }] = await Promise.all([
-      import(chrome.runtime.getURL('common/embedder.js'))
-    ]);
-
-    const model = new LocalTabEmbedder();
-    model.deserialize(saved_model);
-
-    // run fine-tuning on the new tabs
-    model.fine_tune_on_new_tabs(new_tabs, () => {
-      // save the updated model back to storage
-      save_model(model.serialize());
-    });
-  } catch (error) {
-    // fine-tuning failed, not critical
   }
 }

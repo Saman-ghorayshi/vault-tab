@@ -365,41 +365,6 @@ class LocalTabEmbedder {
     return this.extract_embedding(indices);
   }
 
-  // fine-tune on new tabs using only tokens already in the vocabulary.
-  // does NOT call create_training_dataset to avoid clearing the vocab.
-  fine_tune_on_new_tabs(new_tabs, on_complete) {
-    if (!this.weights_input || this.vocab_size === 0) {
-      if (on_complete) on_complete();
-      return;
-    }
-
-    // generate skip-gram pairs using only known vocabulary tokens
-    let pairs = [];
-    let window_size = 2;
-
-    for (const tab of new_tabs) {
-      let tokens = tokenize(tab.title + ' ' + (tab.url || ''));
-      let indices = tokens
-        .map(t => this.vocab.get(t))
-        .filter(idx => idx !== undefined);
-
-      for (let i = 0; i < indices.length; i++) {
-        for (let j = Math.max(0, i - window_size); j <= Math.min(indices.length - 1, i + window_size); j++) {
-          if (i === j) continue;
-          pairs.push([indices[i], indices[j]]);
-        }
-      }
-    }
-
-    if (pairs.length === 0) {
-      if (on_complete) on_complete();
-      return;
-    }
-
-    // run a small number of epochs at a lower learning rate
-    this.train_epochs(pairs, 3, 0.01, null, on_complete);
-  }
-
   // suggest a semantic group name for a set of tabs.
   // computes the centroid embedding of all tabs, then finds the closest
   // vocabulary token by cosine similarity. returns the token as a
