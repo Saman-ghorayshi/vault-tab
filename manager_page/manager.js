@@ -9,6 +9,7 @@ import {
   derive_key_from_password, decrypt, encrypt,
   base64_to_array_buffer
 } from '../common/crypto.js';
+import { is_restorable_url } from '../common/urls.js';
 import { LocalTabEmbedder, calculate_cosine_similarity, kmeans_cluster } from '../common/embedder.js';
 
 const VERIFIER_STRING = 'aegis-verification-string';
@@ -927,17 +928,6 @@ function show_undo_toast() {
 function hide_undo_toast() {
   document.getElementById('undo-toast').classList.add('hidden');
   if (delete_state.timer_interval) clearInterval(delete_state.timer_interval);
-}
-
-// URL schemes that chrome.tabs.create will reject
-const UNRESTRICTED_SCHEMES = ['chrome:', 'chrome-extension:', 'about:', 'edge:', 'brave:', 'devtools:'];
-
-function is_restorable_url(url) {
-  if (!url) return false;
-  for (const scheme of UNRESTRICTED_SCHEMES) {
-    if (url.startsWith(scheme)) return false;
-  }
-  return true;
 }
 
 // restore tabs in batches to avoid overwhelming the browser
