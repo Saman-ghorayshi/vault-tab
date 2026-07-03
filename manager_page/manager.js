@@ -1250,6 +1250,11 @@ function create_group_element(group_id, group_data, group_index = 0) {
     // stores a reference to the dragged element, then on drop reorders
     // the dom and persists the new order to encrypted storage
     tab_element.addEventListener('dragstart', (e) => {
+      // if semantic search has reordered the dom, drop the snapshot first so
+      // the user drags from their real order, not the visual ranking. this
+      // prevents the persisted reorder from clobbering the user's order with
+      // semantic-search positions.
+      restore_search_order();
       tab_element.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', group_id);
