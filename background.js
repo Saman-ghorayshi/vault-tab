@@ -7,17 +7,7 @@ import {
   get_tab_groups, save_tab_groups
 } from './common/storage.js';
 import { encrypt } from './common/crypto.js';
-
-// set of URL schemes that cannot be saved
-const UNSAVEABLE_SCHEMES = ['chrome:', 'chrome-extension:', 'about:', 'edge:', 'brave:', 'devtools:'];
-
-function is_unsaveable_url(url) {
-  if (!url) return true;
-  for (const scheme of UNSAVEABLE_SCHEMES) {
-    if (url.startsWith(scheme)) return true;
-  }
-  return false;
-}
+import { get_url_status, derive_title_from_url } from './common/urls.js';
 
 // create the context menu item when the extension is installed
 // onInstalled fires on install AND on update, so remove any existing
@@ -49,23 +39,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     // if right-clicked on a link, save the link url instead of the page
     const target_url = info.linkUrl || tab.url || tab.pendingUrl || '';
 
-    // determine saveable status
-    let status = 'ok';
-    if (!target_url) {
-      return; // nothing to save
-    }
-    if (is_unsaveable_url(target_url)) {
-      // save with metadata so the user sees it was recorded, but mark non-restorable
-      status = 'unsaveable';
-    }
-    if (target_url.startsWith('file://')) {
-      status = 'local_file';
-    }
+    if (!target_url) return; // nothing to save
 
-    let title = info.linkUrl ? (tab.title || '') : tab.title;
-    if (!title || title.trim() === '') {
-      try { title = new URL(target_url).hostname; } catch (e) { title = 'Untitled'; }
-    }
+    const status = get_url_status(target_url);
+
+    // when saving a link, use the page title as a hint, fall back to hostname
+    const page_title = info.linkUrl ? (tab.title || '') : tab.title;
+    const title = derive_title_from_url(target_url, page_title);
 
     const tab_data = {
       date: new Date().toISOString(),

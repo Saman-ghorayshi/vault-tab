@@ -8,6 +8,7 @@ import {
   generate_salt, derive_key_from_password, encrypt, decrypt,
   array_buffer_to_base64, base64_to_array_buffer
 } from '../common/crypto.js';
+import { get_url_status, derive_title_from_url } from '../common/urls.js';
 
 const VERIFIER_STRING = 'aegis-verification-string';
 const MIN_PASSWORD_LENGTH = 8;
@@ -227,23 +228,10 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (!target_url || target_url === manager_url) continue;
 
           // determine saveable status
-          let status = 'ok';
-          if (target_url.startsWith('chrome://') ||
-              target_url.startsWith('chrome-extension://') ||
-              target_url.startsWith('about:') ||
-              target_url.startsWith('edge://') ||
-              target_url.startsWith('devtools://') ||
-              target_url.startsWith('brave://')) {
-            status = 'unsaveable';
-          } else if (target_url.startsWith('file://')) {
-            status = 'local_file';
-          }
+          const status = get_url_status(target_url);
 
           // use title from tab, or derive from url, or fallback placeholder
-          let title = tab.title;
-          if (!title || title.trim() === '') {
-            try { title = new URL(target_url).hostname; } catch (e) { title = 'Untitled'; }
-          }
+          const title = derive_title_from_url(target_url, tab.title);
 
           tabs_to_save.push({
             id: crypto.randomUUID(),
@@ -345,28 +333,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const target_url = active_tab.url || active_tab.pendingUrl || '';
 
-      let status = 'ok';
       if (!target_url) {
         alert('This tab has no URL to save.');
         save_current_tab_button.disabled = false;
         save_current_tab_button.textContent = 'Save This Tab';
         return;
       }
-      if (target_url.startsWith('chrome://') ||
-          target_url.startsWith('chrome-extension://') ||
-          target_url.startsWith('about:') ||
-          target_url.startsWith('edge://') ||
-          target_url.startsWith('brave://') ||
-          target_url.startsWith('devtools://')) {
-        status = 'unsaveable';
-      } else if (target_url.startsWith('file://')) {
-        status = 'local_file';
-      }
 
-      let title = active_tab.title;
-      if (!title || title.trim() === '') {
-        try { title = new URL(target_url).hostname; } catch (e) { title = 'Untitled'; }
-      }
+      const status = get_url_status(target_url);
+      const title = derive_title_from_url(target_url, active_tab.title);
 
       const tab_data = {
         date: new Date().toISOString(),
