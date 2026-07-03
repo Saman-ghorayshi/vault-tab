@@ -9,7 +9,7 @@ import {
   derive_key_from_password, decrypt, encrypt,
   base64_to_array_buffer
 } from '../common/crypto.js';
-import { is_restorable_url } from '../common/urls.js';
+import { is_restorable_url, get_url_status } from '../common/urls.js';
 import { LocalTabEmbedder, calculate_cosine_similarity, kmeans_cluster } from '../common/embedder.js';
 
 const VERIFIER_STRING = 'aegis-verification-string';
@@ -475,14 +475,18 @@ async function save_urls_as_group(urls, prefix = 'Imported') {
   const tab_data = {
     date: new Date().toISOString(),
     tabs: urls.map(url => {
+      // derive hostname for the display title, fall back to the raw url
       let hostname = url;
       try { hostname = new URL(url).hostname; } catch (e) {}
+      // compute status so chrome:// and file:// get the right badge and
+      // get filtered out of restore if the paste/import filter ever
+      // lets them through
       return {
         id: crypto.randomUUID(),
         title: `${prefix}: ${hostname}`,
         url: url,
         fav_icon_url: null,
-        status: 'ok'
+        status: get_url_status(url)
       };
     })
   };
