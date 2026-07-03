@@ -821,11 +821,14 @@ function soft_delete_group(group_element, group_id) {
 
 async function commit_deletion(deletion) {
   try {
-    const groups = await get_tab_groups(active_username);
     const session_key = await get_session_key();
 
+    // group deletion is just a filter on the envelope list -- it does not
+    // touch any other group's ciphertext, so a concurrent reorder or import
+    // is preserved automatically by reading fresh right before save.
     if (deletion.type === 'group') {
-      const updated_groups = groups.filter(g => g.id !== deletion.group_id);
+      const fresh_groups = await get_tab_groups(active_username);
+      const updated_groups = fresh_groups.filter(g => g.id !== deletion.group_id);
       await save_tab_groups(active_username, updated_groups);
       deletion.element.remove();
       if (updated_groups.length === 0) {
@@ -833,31 +836,75 @@ async function commit_deletion(deletion) {
           '<div class="empty-state"><p>No saved tabs found.</p></div>';
       }
     } else if (deletion.type === 'tab') {
+      // if the session was locked during the 8s undo window we can no longer
+      // decrypt, and we must not silently drop the DOM element while leaving
+      // the tab in storage (that was the old zombie-tab bug). undo the soft
+      // delete visually so the user can re-delete after unlocking.
+      if (!session_key) {
+        deletion.element.classList.remove('fade-out');
+        const rm_idx = delete_state.pending_deletions.indexOf(deletion);
+        if (rm_idx >= 0) delete_state.pending_deletions.splice(rm_idx, 1);
+        if (delete_state.pending_deletions.length === 0) hide_undo_toast();
+        return;
+      }
+
+      // read the group fresh. decrypt/modify/re-encrypt only that one envelope
+      // so any reorder or import that landed in between is not clobbered.
+      let groups = await get_tab_groups(active_username);
       const group_index = groups.findIndex(g => g.id === deletion.group_id);
-      if (group_index !== -1 && session_key) {
-        const group_data = JSON.parse(await decrypt(groups[group_index], session_key));
-        const tab_del_idx = group_data.tabs.findIndex(t => t.id === deletion.tab_id);
-        if (tab_del_idx === -1) {
-          deletion.element.remove();
-          const rm_idx = delete_state.pending_deletions.indexOf(deletion);
-          if (rm_idx >= 0) delete_state.pending_deletions.splice(rm_idx, 1);
-          if (delete_state.pending_deletions.length === 0) hide_undo_toast();
-          return;
+      if (group_index === -1) {
+        // group was removed in the meantime, nothing to commit
+        deletion.element.remove();
+        const rm_idx = delete_state.pending_deletions.indexOf(deletion);
+        if (rm_idx >= 0) delete_state.pending_deletions.splice(rm_idx, 1);
+        if (delete_state.pending_deletions.length === 0) hide_undo_toast();
+        return;
+      }
+
+      const group_data = JSON.parse(await decrypt(groups[group_index], session_key));
+      const tab_del_idx = group_data.tabs.findIndex(t => t.id === deletion.tab_id);
+      if (tab_del_idx === -1) {
+        deletion.element.remove();
+        const rm_idx = delete_state.pending_deletions.indexOf(deletion);
+        if (rm_idx >= 0) delete_state.pending_deletions.splice(rm_idx, 1);
+        if (delete_state.pending_deletions.length === 0) hide_undo_toast();
+        return;
+      }
+
+      group_data.tabs.splice(tab_del_idx, 1);
+      const group_now_empty = group_data.tabs.length === 0;
+
+      if (group_now_empty) {
+        // re-read the envelope list fresh again, then drop this group by id.
+        // avoids overwriting a concurrent reorder or save that landed while
+        // we were decrypting above.
+        groups = await get_tab_groups(active_username);
+        const without_group = groups.filter(g => g.id !== deletion.group_id);
+        await save_tab_groups(active_username, without_group);
+        deletion.element.closest('.group-card')?.remove();
+        if (without_group.length === 0) {
+          document.getElementById('groups-container').innerHTML =
+            '<div class="empty-state"><p>No saved tabs found.</p></div>';
         }
-        group_data.tabs.splice(tab_del_idx, 1);
-        if (group_data.tabs.length === 0) {
-          groups.splice(group_index, 1);
-          deletion.element.closest('.group-card')?.remove();
+      } else {
+        const encrypted = await encrypt(JSON.stringify(group_data), session_key);
+        // re-read the envelope list fresh again so the order/import changes
+        // that happened during encrypt() survive the write.
+        groups = await get_tab_groups(active_username);
+        const idx = groups.findIndex(g => g.id === deletion.group_id);
+        if (idx === -1) {
+          // group got removed while we were re-encrypting. drop so we don't
+          // resurrect a deleted group.
+          deletion.element.remove();
         } else {
-          const encrypted = await encrypt(JSON.stringify(group_data), session_key);
-          groups[group_index] = {
+          groups[idx] = {
             id: deletion.group_id,
             iv: encrypted.iv,
             ciphertext: encrypted.ciphertext
           };
+          await save_tab_groups(active_username, groups);
           deletion.element.remove();
         }
-        await save_tab_groups(active_username, groups);
       }
     }
 
@@ -865,7 +912,8 @@ async function commit_deletion(deletion) {
     if (index >= 0) delete_state.pending_deletions.splice(index, 1);
     if (delete_state.pending_deletions.length === 0) hide_undo_toast();
   } catch (error) {
-    // deletion failed silently, element stays visible
+    // deletion failed -- keep the element visible so the user sees it
+    // is still there instead of silently vanishing from storage
   }
 }
 
