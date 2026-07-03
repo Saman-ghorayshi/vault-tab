@@ -560,6 +560,9 @@ function setup_action_panel() {
       URL.revokeObjectURL(url);
     });
   }
+
+  // one permanent undo listener instead of cloning the button on every toast
+  document.getElementById('undo-button')?.addEventListener('click', undo_all_deletions);
 }
 
 function setup_keyboard_shortcuts() {
@@ -929,7 +932,6 @@ function undo_all_deletions() {
 
 function show_undo_toast() {
   const toast = document.getElementById('undo-toast');
-  const undo_button = document.getElementById('undo-button');
   const timer_span = document.getElementById('toast-timer');
   const message_span = document.getElementById('toast-message');
   const progress_bar = document.getElementById('toast-progress');
@@ -952,9 +954,6 @@ function show_undo_toast() {
   }
 
   toast.classList.remove('hidden');
-  const new_undo_button = undo_button.cloneNode(true);
-  undo_button.parentNode.replaceChild(new_undo_button, undo_button);
-  new_undo_button.addEventListener('click', undo_all_deletions);
 
   // restart the progress bar animation
   if (progress_bar) {
