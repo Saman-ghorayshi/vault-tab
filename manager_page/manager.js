@@ -7,7 +7,7 @@ import {
 } from '../common/storage.js';
 import {
   derive_key_from_password, decrypt, encrypt,
-  base64_to_array_buffer,
+  base64_to_array_buffer, generate_salt, array_buffer_to_base64,
   OLD_ITERATIONS, CURRENT_ITERATIONS
 } from '../common/crypto.js';
 import { is_restorable_url, get_url_status } from '../common/urls.js';
@@ -406,18 +406,25 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // populate user dropdown for multi-user
     const all_users = await get_all_users();
-    const manager_username_select = document.getElementById('manager-username-select');
-    const manager_username_wrapper = document.getElementById('manager-username-wrapper');
-    if (all_users.length > 1 && manager_username_select) {
-      manager_username_wrapper?.classList.remove('hidden');
-      all_users.forEach(u => {
-        const option = document.createElement('option');
-        option.value = u.username;
-        option.textContent = u.username;
-        manager_username_select.appendChild(option);
-      });
-    } else if (all_users.length === 1 && manager_username_select) {
-      manager_username_select.value = all_users[0].username;
+
+    // if no users exist yet, show the account setup modal directly
+    if (all_users.length === 0) {
+      password_prompt_view.classList.add('hidden');
+      show_manager_setup_modal(false);
+    } else {
+      const manager_username_select = document.getElementById('manager-username-select');
+      const manager_username_wrapper = document.getElementById('manager-username-wrapper');
+      if (all_users.length > 1 && manager_username_select) {
+        manager_username_wrapper?.classList.remove('hidden');
+        all_users.forEach(u => {
+          const option = document.createElement('option');
+          option.value = u.username;
+          option.textContent = u.username;
+          manager_username_select.appendChild(option);
+        });
+      } else if (all_users.length === 1 && manager_username_select) {
+        manager_username_select.value = all_users[0].username;
+      }
     }
 
     setTimeout(() => manager_password.focus(), 100);
@@ -501,6 +508,65 @@ document.addEventListener('DOMContentLoaded', async () => {
         manager_unlock_button.disabled = false;
         manager_unlock_button.textContent = 'Unlock';
       }
+    });
+  }
+
+  // setup modal controls: "Create a new account instead" link on unlock screen
+  const show_setup_link = document.getElementById('manager-show-setup-link');
+  if (show_setup_link) {
+    show_setup_link.addEventListener('click', (e) => {
+      e.preventDefault();
+      document.getElementById('password-prompt-view').classList.add('hidden');
+      show_manager_setup_modal(true);
+    });
+  }
+
+  // "+ Add Account" button in settings panel
+  const add_account_btn = document.getElementById('manager-add-account');
+  if (add_account_btn) {
+    add_account_btn.addEventListener('click', () => {
+      show_manager_setup_modal(false);
+    });
+  }
+
+  // setup modal submit / cancel
+  const setup_button = document.getElementById('manager-setup-button');
+  if (setup_button) setup_button.addEventListener('click', handle_manager_setup_submit);
+  const setup_cancel = document.getElementById('manager-setup-cancel');
+  if (setup_cancel) setup_cancel.addEventListener('click', close_manager_setup_modal);
+
+  // Enter key in setup modal fields
+  const m_setup_username = document.getElementById('manager-setup-username');
+  const m_setup_password = document.getElementById('manager-setup-password');
+  const m_setup_confirm = document.getElementById('manager-setup-password-confirm');
+  if (m_setup_username) {
+    m_setup_username.addEventListener('keydown', (e) => { if (e.key === 'Enter') m_setup_password.focus(); });
+  }
+  if (m_setup_password) {
+    m_setup_password.addEventListener('keydown', (e) => { if (e.key === 'Enter') m_setup_confirm.focus(); });
+  }
+  if (m_setup_confirm) {
+    m_setup_confirm.addEventListener('keydown', (e) => { if (e.key === 'Enter') setup_button?.click(); });
+  }
+
+  // password strength meter in manager setup modal
+  const m_strength_bar = document.getElementById('manager-strength-bar');
+  const m_strength_text = document.getElementById('manager-strength-text');
+  if (m_setup_password && m_strength_bar) {
+    m_setup_password.addEventListener('input', () => {
+      const result = check_password_strength(m_setup_password.value);
+      m_strength_bar.style.width = result.percentage + '%';
+      m_strength_bar.style.backgroundColor = result.color;
+      m_strength_text.textContent = result.label;
+      m_strength_text.style.color = result.color;
+    });
+  }
+
+  // close setup modal when clicking outside the content
+  const setup_modal = document.getElementById('manager-setup-modal');
+  if (setup_modal) {
+    setup_modal.addEventListener('click', (e) => {
+      if (e.target === setup_modal) close_manager_setup_modal();
     });
   }
 });
@@ -1319,6 +1385,130 @@ function show_rename_modal(group_id, current_name, title_el) {
   });
 }
 
+// show the manager's account setup modal.
+// if from_unlock is true, hiding it returns to the unlock prompt.
+function show_manager_setup_modal(from_unlock) {
+  const modal = document.getElementById('manager-setup-modal');
+  const setup_username = document.getElementById('manager-setup-username');
+  const setup_password = document.getElementById('manager-setup-password');
+  const setup_confirm = document.getElementById('manager-setup-password-confirm');
+  const setup_error = document.getElementById('manager-setup-error');
+
+  modal.classList.remove('hidden');
+  modal.style.display = 'flex';
+  setup_username.value = '';
+  setup_password.value = '';
+  setup_confirm.value = '';
+  setup_error.classList.add('hidden');
+  setup_username.dataset.fromUnlock = from_unlock ? '1' : '0';
+  setTimeout(() => setup_username.focus(), 50);
+}
+
+// handle the manager's setup submit: create a new account.
+async function handle_manager_setup_submit() {
+  const modal = document.getElementById('manager-setup-modal');
+  const setup_username = document.getElementById('manager-setup-username');
+  const setup_password = document.getElementById('manager-setup-password');
+  const setup_confirm = document.getElementById('manager-setup-password-confirm');
+  const setup_error = document.getElementById('manager-setup-error');
+  const setup_button = document.getElementById('manager-setup-button');
+
+  const username = setup_username.value.trim();
+  const password = setup_password.value;
+  const confirm_password = setup_confirm.value;
+
+  setup_error.classList.add('hidden');
+  if (!username) {
+    setup_error.textContent = 'Please enter a username';
+    setup_error.classList.remove('hidden');
+    return;
+  }
+  if (password !== confirm_password) {
+    setup_error.textContent = 'Passwords do not match';
+    setup_error.classList.remove('hidden');
+    return;
+  }
+  if (password.length < 8) {
+    setup_error.textContent = 'Password must be at least 8 characters';
+    setup_error.classList.remove('hidden');
+    return;
+  }
+
+  const existing = await get_user_by_username(username);
+  if (existing) {
+    setup_error.textContent = 'An account with that username already exists';
+    setup_error.classList.remove('hidden');
+    return;
+  }
+
+  setup_button.disabled = true;
+  setup_button.textContent = 'Creating...';
+
+  try {
+    const salt = generate_salt();
+    const key = await derive_key_from_password(password, salt, CURRENT_ITERATIONS);
+    const verifier = await encrypt(VERIFIER_STRING, key);
+
+    const new_user = {
+      username,
+      password_salt: array_buffer_to_base64(salt),
+      password_verifier: verifier,
+      password_iterations: CURRENT_ITERATIONS,
+      tab_groups: []
+    };
+    await save_user(new_user);
+
+    const from_unlock = setup_username.dataset.fromUnlock === '1';
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
+    setup_button.disabled = false;
+    setup_button.textContent = 'Create Account';
+
+    if (from_unlock) {
+      // came from the unlock screen: return to it so user can unlock as the new account
+      document.getElementById('password-prompt-view').classList.remove('hidden');
+      // refresh the dropdown
+      const select = document.getElementById('manager-username-select');
+      const wrapper = document.getElementById('manager-username-wrapper');
+      select.innerHTML = '';
+      const users = await get_all_users();
+      if (users.length > 1) {
+        wrapper?.classList.remove('hidden');
+        users.forEach(u => {
+          const opt = document.createElement('option');
+          opt.value = u.username;
+          opt.textContent = u.username;
+          select.appendChild(opt);
+        });
+      } else {
+        wrapper?.classList.add('hidden');
+        select.value = users[0]?.username || '';
+      }
+    } else {
+      show_toast(`Account "${username}" created.`, 'success');
+    }
+  } catch (error) {
+    setup_error.textContent = `Setup failed: ${error.message}`;
+    setup_error.classList.remove('hidden');
+    setup_button.disabled = false;
+    setup_button.textContent = 'Create Account';
+  }
+}
+
+// close the manager's setup modal without creating anything.
+function close_manager_setup_modal() {
+  const modal = document.getElementById('manager-setup-modal');
+  const setup_username = document.getElementById('manager-setup-username');
+  modal.classList.add('hidden');
+  modal.style.display = 'none';
+  const from_unlock = setup_username?.dataset.fromUnlock === '1';
+  if (from_unlock) {
+    document.getElementById('password-prompt-view').classList.remove('hidden');
+  }
+  document.getElementById('manager-setup-button').disabled = false;
+  document.getElementById('manager-setup-button').textContent = 'Create Account';
+}
+
 function create_group_element(group_id, group_data, group_index = 0) {
   const group_element = document.createElement('div');
   group_element.className = 'group-card';
@@ -2011,4 +2201,32 @@ function semantic_search_tabs(query) {
   document.querySelectorAll('.group-card').forEach(card => {
     card.style.display = '';
   });
+}
+
+// evaluate password strength and return label, color, and percentage.
+// checks length and character variety (upper, lower, digits, symbols).
+function check_password_strength(password) {
+  if (!password || password.length === 0) {
+    return { label: '', color: 'var(--bg-tertiary)', percentage: 0 };
+  }
+
+  let score = 0;
+  if (password.length >= 8) score += 25;
+  if (password.length >= 12) score += 15;
+  if (password.length >= 16) score += 10;
+
+  if (/[a-z]/.test(password)) score += 10;
+  if (/[A-Z]/.test(password)) score += 15;
+  if (/[0-9]/.test(password)) score += 15;
+  if (/[^a-zA-Z0-9]/.test(password)) score += 10;
+
+  if (score >= 80) {
+    return { label: 'Strong', color: '#4caf50', percentage: 100 };
+  } else if (score >= 50) {
+    return { label: 'Medium', color: '#ff9800', percentage: 60 };
+  } else if (score >= 25) {
+    return { label: 'Weak', color: '#f44336', percentage: 30 };
+  } else {
+    return { label: 'Too short', color: '#f44336', percentage: 10 };
+  }
 }

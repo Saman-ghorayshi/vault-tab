@@ -52,6 +52,7 @@
           <option value="60">1 hour</option>
         </select>
       </label>
+      <button id="manager-add-account" class="secondary-button" style="margin-left:auto">+ Add Account</button>
     </div>
 
     <div id="loading-message" class="loading-message">
@@ -74,6 +75,36 @@
         </div>
         <div id="manager-error" class="error-message hidden"></div>
         <button id="manager-unlock-button" class="primary-button">Unlock</button>
+        <p class="secondary-link"><a href="#" id="manager-show-setup-link">Create a new account instead</a></p>
+      </div>
+    </div>
+
+    <!-- account setup modal (hidden, shown via + Add Account or the unlock link) -->
+    <div id="manager-setup-modal" class="hidden modal" style="display:none">
+      <div class="modal-content" style="padding:24px;max-width:400px">
+        <h2>Create Account</h2>
+        <div class="form-group">
+          <input type="text" id="manager-setup-username" placeholder="Username" />
+        </div>
+        <div class="form-group">
+          <div class="password-wrapper">
+            <input type="password" id="manager-setup-password" placeholder="Enter password" />
+            <button type="button" class="password-toggle" data-target="manager-setup-password" tabindex="-1">Show</button>
+          </div>
+          <div id="manager-strength-bar" class="password-strength-bar"></div>
+          <div id="manager-strength-text" class="password-strength-text"></div>
+        </div>
+        <div class="form-group">
+          <div class="password-wrapper">
+            <input type="password" id="manager-setup-password-confirm" placeholder="Confirm password" />
+            <button type="button" class="password-toggle" data-target="manager-setup-password-confirm" tabindex="-1">Show</button>
+          </div>
+        </div>
+        <div id="manager-setup-error" class="error-message hidden"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button id="manager-setup-cancel" class="secondary-button">Cancel</button>
+          <button id="manager-setup-button" class="primary-button">Create Account</button>
+        </div>
       </div>
     </div>
 
