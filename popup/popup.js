@@ -1,7 +1,7 @@
 import {
   get_all_users, save_user, get_user_by_username,
   get_tab_groups, save_tab_groups,
-  get_session_key, store_session_key, set_session_user, get_session_user,
+  get_session_key, store_session_key, clear_session_key, set_session_user, get_session_user,
   load_model
 } from '../common/storage.js';
 import {
@@ -512,6 +512,40 @@ document.addEventListener('DOMContentLoaded', async () => {
       show_toast(`Failed to open manager: ${error.message}`, 'error');
     }
   });
+
+  // "Create a new account instead" link on the unlock screen
+  const show_setup_link = document.getElementById('popup-show-setup-link');
+  if (show_setup_link) {
+    show_setup_link.addEventListener('click', (e) => {
+      e.preventDefault();
+      unlock_view.classList.add('hidden');
+      render_setup_view(false);
+    });
+  }
+
+  // "+ Add Account" button on the unlocked view
+  const add_account_btn = document.getElementById('popup-add-account-button');
+  if (add_account_btn) {
+    add_account_btn.addEventListener('click', () => {
+      unlocked_view.classList.add('hidden');
+      locked_view.classList.remove('hidden');
+      render_setup_view(false);
+    });
+  }
+
+  // Lock button on the unlocked view
+  const lock_btn = document.getElementById('popup-lock-button');
+  if (lock_btn) {
+    lock_btn.addEventListener('click', async () => {
+      await clear_session_key();
+      await set_session_user(null);
+      unlocked_view.classList.add('hidden');
+      locked_view.classList.remove('hidden');
+      unlock_view.classList.remove('hidden');
+      unlock_password.value = '';
+      refresh_unlock_user_list();
+    });
+  }
 });
 
 // evaluate password strength and return label, color, and percentage

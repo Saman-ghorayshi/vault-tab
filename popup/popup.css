@@ -210,6 +210,20 @@ button:disabled {
   min-height: 14px;
 }
 
+/* secondary link on unlock screen (Create a new account) */
+.secondary-link {
+  text-align: center;
+  margin-top: 12px;
+  font-size: 12px;
+}
+.secondary-link a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.secondary-link a:hover {
+  text-decoration: underline;
+}
+
 /* toast notifications */
 .aegis-toast {
   position: fixed;
