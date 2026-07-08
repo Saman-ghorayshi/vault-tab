@@ -1164,11 +1164,17 @@ async function render_page(key) {
     }
     if (groups_needing_resave.size > 0) {
       try {
-        const updated_groups = encrypted_groups.slice();
+        // re-read the envelope list fresh so any concurrent reorder or
+        // import that happened during decrypting doesn't get clobbered.
+        const fresh_groups = await get_tab_groups(active_username);
+        const updated_groups = fresh_groups.slice();
         for (const idx of groups_needing_resave) {
           const r = decrypted_results[idx];
+          // the group index might have shifted in the fresh array; re-locate by id
+          const fresh_idx = updated_groups.findIndex(g => g.id === r.id);
+          if (fresh_idx === -1) continue; // group was removed, skip
           const re_enc = await encrypt(JSON.stringify(r.data), key);
-          updated_groups[idx] = { id: r.id, iv: re_enc.iv, ciphertext: re_enc.ciphertext };
+          updated_groups[fresh_idx] = { id: r.id, iv: re_enc.iv, ciphertext: re_enc.ciphertext };
         }
         await save_tab_groups(active_username, updated_groups);
       } catch (_) {
@@ -1472,7 +1478,8 @@ async function persist_tab_reorder(group_id, tabs_list_element) {
     const session_key = await get_session_key();
     if (!session_key) return;
 
-    const groups = await get_tab_groups(active_username);
+    // read the group fresh
+    let groups = await get_tab_groups(active_username);
     const group_index = groups.findIndex(g => g.id === group_id);
     if (group_index === -1) return;
 
@@ -1493,7 +1500,13 @@ async function persist_tab_reorder(group_id, tabs_list_element) {
 
     group_data.tabs = reordered_tabs;
     const encrypted = await encrypt(JSON.stringify(group_data), session_key);
-    groups[group_index] = {
+
+    // re-read the envelope list fresh before writing so any concurrent
+    // reorder or import that happened during encryption survives.
+    groups = await get_tab_groups(active_username);
+    const idx = groups.findIndex(g => g.id === group_id);
+    if (idx === -1) return; // group was removed in the meantime, abort
+    groups[idx] = {
       id: group_id,
       iv: encrypted.iv,
       ciphertext: encrypted.ciphertext
@@ -1515,14 +1528,21 @@ async function rename_session(group_id, new_name, title_el) {
     const session_key = await get_session_key();
     if (!session_key) return;
 
-    const groups = await get_tab_groups(active_username);
+    // read the group fresh
+    let groups = await get_tab_groups(active_username);
     const group_index = groups.findIndex(g => g.id === group_id);
     if (group_index === -1) return;
 
     const group_data = JSON.parse(await decrypt(groups[group_index], session_key));
     group_data.name = new_name;
     const encrypted = await encrypt(JSON.stringify(group_data), session_key);
-    groups[group_index] = {
+
+    // re-read the envelope list fresh before writing so a concurrent
+    // reorder or import doesn't get silently overwritten.
+    groups = await get_tab_groups(active_username);
+    const idx = groups.findIndex(g => g.id === group_id);
+    if (idx === -1) return; // group was removed in the meantime, abort
+    groups[idx] = {
       id: group_id,
       iv: encrypted.iv,
       ciphertext: encrypted.ciphertext
