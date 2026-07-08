@@ -1141,11 +1141,14 @@ async function render_page(key) {
     }
 
     // decrypt all groups in parallel for speed
+    // groups that fail to decrypt are kept as error entries so we can render
+    // a diagnostic card instead of silently dropping them (bug 1.5)
     const decrypt_promises = encrypted_groups.map(group =>
       decrypt(group, key).then(plaintext => ({
         id: group.id,
-        data: JSON.parse(plaintext)
-      })).catch(() => null)
+        data: JSON.parse(plaintext),
+        error: null
+      })).catch(() => ({ id: group.id, data: null, error: true }))
     );
 
     const decrypted_results = await Promise.all(decrypt_promises);
@@ -1154,7 +1157,7 @@ async function render_page(key) {
     const groups_needing_resave = new Set();
     for (let i = 0; i < decrypted_results.length; i++) {
       const result = decrypted_results[i];
-      if (!result) continue;
+      if (result.error) continue;
       for (const tab of result.data.tabs) {
         if (!tab.id) {
           tab.id = crypto.randomUUID();
@@ -1185,7 +1188,10 @@ async function render_page(key) {
     // render groups in original order
     let group_index = 0;
     for (const result of decrypted_results) {
-      if (!result) continue;
+      if (result.error) {
+        groups_container.appendChild(create_corrupted_group_element(result.id));
+        continue;
+      }
       groups_container.appendChild(
         create_group_element(result.id, result.data, group_index)
       );
@@ -1401,6 +1407,43 @@ function create_group_element(group_id, group_data, group_index = 0) {
     soft_delete_group(group_element, group_id);
   });
 
+  return group_element;
+}
+
+// render a diagnostic card for a group whose ciphertext could not be decrypted.
+// shows the raw group id, a warning message, and a delete button — the only
+// useful action for ciphertext that can never be decrypted.
+function create_corrupted_group_element(group_id) {
+  const group_element = document.createElement('div');
+  group_element.className = 'group-card group-card-corrupted';
+  group_element.dataset.groupId = group_id;
+
+  const header = document.createElement('div');
+  header.className = 'group-header';
+
+  const title_el = document.createElement('h3');
+  title_el.className = 'group-title group-title-corrupted';
+  title_el.textContent = '⚠ Could not read this saved group';
+
+  const subtitle = document.createElement('p');
+  subtitle.className = 'corrupted-subtitle';
+  subtitle.textContent = `The encrypted data for this group (id: ${group_id.slice(0, 8)}…) could not be decrypted. It may be corrupted.`;
+
+  const actions_div = document.createElement('div');
+  actions_div.className = 'group-actions';
+  const delete_btn = document.createElement('button');
+  delete_btn.className = 'delete-button';
+  delete_btn.textContent = 'Delete Group';
+  delete_btn.addEventListener('click', () => {
+    soft_delete_group(group_element, group_id);
+  });
+  actions_div.appendChild(delete_btn);
+
+  header.appendChild(title_el);
+  header.appendChild(subtitle);
+  header.appendChild(actions_div);
+
+  group_element.appendChild(header);
   return group_element;
 }
 
