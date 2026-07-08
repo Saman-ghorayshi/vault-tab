@@ -226,6 +226,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  // AI semantic auto-naming: use the trained embedder to suggest a group name
+  // for the given set of tabs. returns the suggested name string or null.
+  async function try_suggest_group_name(tabs_to_save, session_user_el, session_key_el) {
+    try {
+      const saved_model = await load_model(session_user_el, session_key_el);
+      if (saved_model && saved_model.is_trained) {
+        const { LocalTabEmbedder } = await import(
+          chrome.runtime.getURL('common/embedder.js')
+        );
+        const model = new LocalTabEmbedder();
+        model.deserialize(saved_model);
+        const suggested_name = model.suggest_group_name(tabs_to_save);
+        if (suggested_name) return suggested_name;
+      }
+    } catch (_) {
+      // auto-naming failed, fall back to date-based default
+    }
+    return null;
+  }
+
   // save all open tabs in the current window, encrypted
   save_tabs_button.addEventListener('click', async () => {
     const session_key = await get_session_key();
@@ -294,22 +314,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       };
 
       // AI semantic auto-naming: use the trained embedder to suggest a group name
-      try {
-        const saved_model = await load_model(session_user, session_key);
-        if (saved_model && saved_model.is_trained) {
-          const { LocalTabEmbedder } = await import(
-            chrome.runtime.getURL('common/embedder.js')
-          );
-          const model = new LocalTabEmbedder();
-          model.deserialize(saved_model);
-          const suggested_name = model.suggest_group_name(tabs_to_save);
-          if (suggested_name) {
-            tab_data.name = suggested_name;
-          }
-        }
-      } catch (_) {
-        // auto-naming failed, fall back to date-based default
-      }
+      const suggested_name = await try_suggest_group_name(tabs_to_save, session_user, session_key);
+      if (suggested_name) tab_data.name = suggested_name;
 
       const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
       const groups = await get_tab_groups(session_user);
@@ -380,6 +386,10 @@ document.addEventListener('DOMContentLoaded', async () => {
           status: status
         }]
       };
+
+      // AI semantic auto-naming (same as the save-all-tabs path)
+      const suggested_name = await try_suggest_group_name(tab_data.tabs, session_user, session_key);
+      if (suggested_name) tab_data.name = suggested_name;
 
       const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
       const groups = await get_tab_groups(session_user);
