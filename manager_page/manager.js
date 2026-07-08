@@ -402,7 +402,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     setTimeout(() => manager_password.focus(), 100);
 
-    manager_password.addEventListener('keypress', (e) => {
+    manager_password.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') manager_unlock_button.click();
     });
 

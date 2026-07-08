@@ -81,9 +81,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     setup_view.classList.remove('hidden');
     setTimeout(() => setup_username.focus(), 100);
 
-    setup_username.addEventListener('keypress', (e) => { if (e.key === 'Enter') setup_password.focus(); });
-    setup_password.addEventListener('keypress', (e) => { if (e.key === 'Enter') setup_password_confirm.focus(); });
-    setup_password_confirm.addEventListener('keypress', (e) => { if (e.key === 'Enter') setup_button.click(); });
+    setup_username.addEventListener('keydown', (e) => { if (e.key === 'Enter') setup_password.focus(); });
+    setup_password.addEventListener('keydown', (e) => { if (e.key === 'Enter') setup_password_confirm.focus(); });
+    setup_password_confirm.addEventListener('keydown', (e) => { if (e.key === 'Enter') setup_button.click(); });
 
     setup_button.addEventListener('click', async () => {
       const username = setup_username.value.trim();
@@ -155,7 +155,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     setTimeout(() => unlock_password.focus(), 100);
-    unlock_password.addEventListener('keypress', (e) => { if (e.key === 'Enter') unlock_button.click(); });
+    unlock_password.addEventListener('keydown', (e) => { if (e.key === 'Enter') unlock_button.click(); });
 
     unlock_button.addEventListener('click', async () => {
       const username = all_users.length === 1
