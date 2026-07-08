@@ -907,6 +907,16 @@ function soft_delete_group(group_element, group_id) {
   show_undo_toast();
 }
 
+// remove an element from selection_state tracking after a real (non-undone)
+// delete, so keyboard navigation and the floating action panel don't reference
+// detached DOM nodes or show a stale selection count.
+function cleanup_selection_for_tab(element) {
+  selection_state.selected_tabs.delete(element);
+  const idx = selection_state.all_tab_elements.indexOf(element);
+  if (idx >= 0) selection_state.all_tab_elements.splice(idx, 1);
+  update_action_panel();
+}
+
 async function commit_deletion(deletion) {
   try {
     const session_key = await get_session_key();
@@ -918,6 +928,7 @@ async function commit_deletion(deletion) {
       const fresh_groups = await get_tab_groups(active_username);
       const updated_groups = fresh_groups.filter(g => g.id !== deletion.group_id);
       await save_tab_groups(active_username, updated_groups);
+      cleanup_selection_for_tab(deletion.element);
       deletion.element.remove();
       if (updated_groups.length === 0) {
         document.getElementById('groups-container').innerHTML =
@@ -942,6 +953,7 @@ async function commit_deletion(deletion) {
       const group_index = groups.findIndex(g => g.id === deletion.group_id);
       if (group_index === -1) {
         // group was removed in the meantime, nothing to commit
+        cleanup_selection_for_tab(deletion.element);
         deletion.element.remove();
         const rm_idx = delete_state.pending_deletions.indexOf(deletion);
         if (rm_idx >= 0) delete_state.pending_deletions.splice(rm_idx, 1);
@@ -952,6 +964,7 @@ async function commit_deletion(deletion) {
       const group_data = JSON.parse(await decrypt(groups[group_index], session_key));
       const tab_del_idx = group_data.tabs.findIndex(t => t.id === deletion.tab_id);
       if (tab_del_idx === -1) {
+        cleanup_selection_for_tab(deletion.element);
         deletion.element.remove();
         const rm_idx = delete_state.pending_deletions.indexOf(deletion);
         if (rm_idx >= 0) delete_state.pending_deletions.splice(rm_idx, 1);
@@ -969,7 +982,9 @@ async function commit_deletion(deletion) {
         groups = await get_tab_groups(active_username);
         const without_group = groups.filter(g => g.id !== deletion.group_id);
         await save_tab_groups(active_username, without_group);
-        deletion.element.closest('.group-card')?.remove();
+        const group_card = deletion.element.closest('.group-card');
+        if (group_card) cleanup_selection_for_tab(group_card);
+        group_card?.remove();
         if (without_group.length === 0) {
           document.getElementById('groups-container').innerHTML =
             '<div class="empty-state"><p>No saved tabs found.</p></div>';
@@ -983,6 +998,7 @@ async function commit_deletion(deletion) {
         if (idx === -1) {
           // group got removed while we were re-encrypting. drop so we don't
           // resurrect a deleted group.
+          cleanup_selection_for_tab(deletion.element);
           deletion.element.remove();
         } else {
           groups[idx] = {
@@ -991,6 +1007,7 @@ async function commit_deletion(deletion) {
             ciphertext: encrypted.ciphertext
           };
           await save_tab_groups(active_username, groups);
+          cleanup_selection_for_tab(deletion.element);
           deletion.element.remove();
         }
       }
