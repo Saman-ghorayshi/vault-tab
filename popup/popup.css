@@ -210,3 +210,30 @@ button:disabled {
   min-height: 14px;
 }
 
+/* toast notifications */
+.aegis-toast {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--bg-card, var(--bg-secondary));
+  color: var(--text-primary);
+  border-radius: var(--border-radius);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  padding: 12px 18px;
+  z-index: 10000;
+  font-size: 13px;
+  max-width: 280px;
+  text-align: center;
+  animation: toast-in 0.25s ease;
+}
+
+.aegis-toast.error { border-left: 3px solid var(--error); }
+.aegis-toast.success { border-left: 3px solid var(--success); }
+.aegis-toast.info { border-left: 3px solid var(--accent); }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+

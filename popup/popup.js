@@ -14,6 +14,27 @@ import { get_url_status, derive_title_from_url } from '../common/urls.js';
 const VERIFIER_STRING = 'aegis-verification-string';
 const MIN_PASSWORD_LENGTH = 8;
 
+let aegis_toast_timeout = null;
+
+// reusable toast helper for the popup.
+// types: 'error' (red), 'success' (green), 'info' (accent).
+function show_toast(message, type = 'info') {
+  // remove any existing toast first
+  const existing = document.getElementById('aegis-toast');
+  if (existing) existing.remove();
+  if (aegis_toast_timeout) clearTimeout(aegis_toast_timeout);
+
+  const toast = document.createElement('div');
+  toast.id = 'aegis-toast';
+  toast.className = `aegis-toast ${type}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+
+  aegis_toast_timeout = setTimeout(() => {
+    toast.remove();
+  }, 3500);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const locked_view = document.getElementById('locked-view');
   const unlocked_view = document.getElementById('unlocked-view');
@@ -301,7 +322,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       if (tabs_to_save.length === 0) {
-        alert('No saveable tabs found in this window.');
+        show_toast('No saveable tabs found in this window.', 'info');
         save_tabs_button.disabled = false;
         save_tabs_button.textContent = 'Save All Tabs';
         return;
@@ -335,7 +356,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       window.close();
     } catch (error) {
-      alert(`Failed to save tabs: ${error.message}`);
+      show_toast(`Failed to save tabs: ${error.message}`, 'error');
       save_tabs_button.disabled = false;
       save_tabs_button.textContent = 'Save All Tabs';
     }
@@ -358,7 +379,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const [active_tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!active_tab) {
-        alert('Could not find the active tab.');
+        show_toast('Could not find the active tab.', 'error');
         save_current_tab_button.disabled = false;
         save_current_tab_button.textContent = 'Save This Tab';
         return;
@@ -367,7 +388,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const target_url = active_tab.url || active_tab.pendingUrl || '';
 
       if (!target_url) {
-        alert('This tab has no URL to save.');
+        show_toast('This tab has no URL to save.', 'error');
         save_current_tab_button.disabled = false;
         save_current_tab_button.textContent = 'Save This Tab';
         return;
@@ -403,7 +424,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       save_current_tab_button.textContent = 'Saved!';
       setTimeout(() => window.close(), 600);
     } catch (error) {
-      alert(`Failed to save tab: ${error.message}`);
+      show_toast(`Failed to save tab: ${error.message}`, 'error');
       save_current_tab_button.disabled = false;
       save_current_tab_button.textContent = 'Save This Tab';
     }
@@ -414,7 +435,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       await chrome.tabs.create({ url: chrome.runtime.getURL('manager_page/manager.html') });
       window.close();
     } catch (error) {
-      alert(`Failed to open manager: ${error.message}`);
+      show_toast(`Failed to open manager: ${error.message}`, 'error');
     }
   });
 });

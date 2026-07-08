@@ -590,6 +590,105 @@ button:disabled {
   min-width: 35px;
 }
 
+/* reusable toast notifications (error/success/info) */
+.aegis-toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  border-radius: var(--border-radius);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  padding: 14px 22px;
+  z-index: 1000;
+  font-size: 14px;
+  max-width: 400px;
+  text-align: center;
+  animation: toast-in 0.25s ease;
+}
+
+.aegis-toast.error { border-left: 3px solid var(--error); }
+.aegis-toast.success { border-left: 3px solid var(--success); }
+.aegis-toast.info { border-left: 3px solid var(--accent); }
+
+/* rename session modal */
+.rename-modal-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1001;
+  animation: modal-bg-in 0.2s ease;
+}
+
+.rename-modal-content {
+  background-color: var(--bg-card);
+  border-radius: var(--border-radius);
+  width: 90%;
+  max-width: 400px;
+  padding: 24px;
+  animation: modal-content-in 0.3s ease;
+}
+
+.rename-modal-content h3 {
+  margin-bottom: 16px;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.rename-modal-content input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--bg-tertiary);
+  border-radius: 4px;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.rename-modal-content input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.rename-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.rename-modal-actions button {
+  padding: 8px 18px;
+  border: none;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.rename-modal-actions .cancel-btn {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.rename-modal-actions .cancel-btn:hover {
+  background-color: var(--bg-secondary);
+}
+
+.rename-modal-actions .confirm-btn {
+  background-color: var(--accent);
+  color: white;
+}
+
+.rename-modal-actions .confirm-btn:hover {
+  background-color: var(--accent-hover);
+}
+
 /* paste urls modal */
 .modal {
   position: fixed;

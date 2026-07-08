@@ -67,6 +67,26 @@ const drag_state = {
   dragged_group_id: null
 };
 
+let aegis_toast_timeout = null;
+
+// reusable toast helper for the manager page.
+// types: 'error' (red), 'success' (green), 'info' (accent).
+function show_toast(message, type = 'info') {
+  const existing = document.getElementById('aegis-toast');
+  if (existing) existing.remove();
+  if (aegis_toast_timeout) clearTimeout(aegis_toast_timeout);
+
+  const toast = document.createElement('div');
+  toast.id = 'aegis-toast';
+  toast.className = `aegis-toast ${type}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+
+  aegis_toast_timeout = setTimeout(() => {
+    toast.remove();
+  }, 3500);
+}
+
 // semantic search reorders the dom for visual ranking.
 // to keep the user's drag-and-drop order safe, we snapshot the original
 // tab and group-card order before the first semantic reorder, and restore it
@@ -146,12 +166,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         .map(url => url.trim())
         .filter(url => url && (url.startsWith('http://') || url.startsWith('https://')));
       if (urls.length === 0) {
-        alert('No valid URLs found.');
+        show_toast('No valid URLs found.', 'info');
         return;
       }
       await save_urls_as_group(urls, 'Imported');
     } catch (error) {
-      alert(`Failed to import URLs: ${error.message}`);
+      show_toast(`Failed to import URLs: ${error.message}`, 'error');
     }
     import_file.value = '';
   });
@@ -165,7 +185,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
         const groups = await get_tab_groups(active_username);
         if (groups.length === 0) {
-          alert('No saved tabs to export.');
+          show_toast('No saved tabs to export.', 'info');
           return;
         }
 
@@ -199,7 +219,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
       } catch (error) {
-        alert(`Failed to export backup: ${error.message}`);
+        show_toast(`Failed to export backup: ${error.message}`, 'error');
       }
     });
   }
@@ -218,13 +238,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         const backup_data = JSON.parse(text);
 
         if (!backup_data.format || backup_data.format !== 'aegis-backup') {
-          alert('This is not a valid Aegis Tab backup file.');
+          show_toast('This is not a valid Aegis Tab backup file.', 'error');
           import_backup_file.value = '';
           return;
         }
 
         if (!backup_data.groups || !Array.isArray(backup_data.groups)) {
-          alert('Backup file is corrupted or missing group data.');
+          show_toast('Backup file is corrupted or missing group data.', 'error');
           import_backup_file.value = '';
           return;
         }
@@ -239,7 +259,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           const existing = await get_user_by_username(backup_username);
           if (!existing) {
             if (!backup_data.password_salt || !backup_data.password_verifier) {
-              alert('Backup file is missing credentials. Cannot restore this account.');
+              show_toast('Backup file is missing credentials. Cannot restore this account.', 'error');
               import_backup_file.value = '';
               return;
             }
@@ -269,10 +289,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         await save_tab_groups(import_target, existing_groups);
-        alert(`Imported ${added_count} group(s) from backup.`);
+        show_toast(`Imported ${added_count} group(s) from backup.`, 'success');
         location.reload();
       } catch (error) {
-        alert(`Failed to import backup: ${error.message}`);
+        show_toast(`Failed to import backup: ${error.message}`, 'error');
       }
       import_backup_file.value = '';
     });
@@ -522,7 +542,7 @@ function setup_paste_modal() {
     const url_regex = /https?:\/\/[^\s<>"']+/g;
     const matches = text.match(url_regex);
     if (!matches || matches.length === 0) {
-      alert('No valid URLs found.');
+      show_toast('No valid URLs found.', 'info');
       return;
     }
     const unique_urls = [...new Set(matches)];
@@ -560,7 +580,7 @@ function close_paste_modal() {
 async function save_urls_as_group(urls, prefix = 'Imported') {
   const session_key = await get_session_key();
   if (!session_key) {
-    alert('Please unlock first.');
+    show_toast('Please unlock first.', 'info');
     return;
   }
 
@@ -1095,7 +1115,7 @@ async function restore_tabs_batched(urls, incognito = false) {
   // filter out URLs that Chrome will reject
   const safe_urls = urls.filter(is_restorable_url);
   if (safe_urls.length === 0) {
-    alert('No restorable URLs in this group (all are system or internal pages).');
+    show_toast('No restorable URLs in this group (all are system or internal pages).', 'info');
     return;
   }
 
@@ -1103,7 +1123,7 @@ async function restore_tabs_batched(urls, incognito = false) {
     if (incognito) {
       const is_allowed = await chrome.extension.isAllowedIncognitoAccess();
       if (!is_allowed) {
-        alert('Private browsing access is not enabled. Please enable "Allow in Incognito" in Chrome extension settings.');
+        show_toast('Private browsing access is not enabled. Please enable "Allow in Incognito" in Chrome extension settings.', 'error');
         return;
       }
     }
@@ -1134,7 +1154,7 @@ async function restore_tabs_batched(urls, incognito = false) {
     }
   } catch (error) {
     console.error('Error in batched restore:', error);
-    alert(`Failed to restore some tabs: ${error.message}`);
+    show_toast(`Failed to restore some tabs: ${error.message}`, 'error');
   }
 }
 
@@ -1232,6 +1252,73 @@ async function render_page(key) {
   }
 }
 
+// show a modal for renaming a session, replacing the old native prompt().
+// follows the same overlay/modal pattern as the paste-urls modal.
+function show_rename_modal(group_id, current_name, title_el) {
+  // remove any existing rename modal first
+  const existing = document.getElementById('rename-modal-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'rename-modal-overlay';
+  overlay.className = 'rename-modal-overlay';
+
+  const content = document.createElement('div');
+  content.className = 'rename-modal-content';
+
+  const heading = document.createElement('h3');
+  heading.textContent = 'Rename Session';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = current_name;
+  input.placeholder = 'Session name';
+
+  const actions = document.createElement('div');
+  actions.className = 'rename-modal-actions';
+
+  const cancel_btn = document.createElement('button');
+  cancel_btn.className = 'cancel-btn';
+  cancel_btn.textContent = 'Cancel';
+
+  const confirm_btn = document.createElement('button');
+  confirm_btn.className = 'confirm-btn';
+  confirm_btn.textContent = 'Save';
+
+  actions.appendChild(cancel_btn);
+  actions.appendChild(confirm_btn);
+  content.appendChild(heading);
+  content.appendChild(input);
+  content.appendChild(actions);
+  overlay.appendChild(content);
+  document.body.appendChild(overlay);
+
+  // focus and select the current name for easy editing
+  setTimeout(() => { input.focus(); input.select(); }, 50);
+
+  function close() {
+    overlay.remove();
+  }
+
+  function confirm() {
+    const new_name = input.value.trim();
+    if (new_name && new_name !== current_name) {
+      rename_session(group_id, new_name, title_el);
+    }
+    close();
+  }
+
+  cancel_btn.addEventListener('click', close);
+  confirm_btn.addEventListener('click', confirm);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') confirm();
+    if (e.key === 'Escape') close();
+  });
+}
+
 function create_group_element(group_id, group_data, group_index = 0) {
   const group_element = document.createElement('div');
   group_element.className = 'group-card';
@@ -1261,12 +1348,10 @@ function create_group_element(group_id, group_data, group_index = 0) {
   header.appendChild(title_el);
   header.appendChild(actions_div);
 
-  // double-click the title to rename the session
+  // double-click the title to rename the session via a modal
+  // (replaces the old native prompt() — matches the existing modal pattern)
   title_el.addEventListener('dblclick', () => {
-    const new_name = prompt('Rename this session:', display_name);
-    if (new_name && new_name.trim()) {
-      rename_session(group_id, new_name.trim(), title_el);
-    }
+    show_rename_modal(group_id, display_name, title_el);
   });
 
   const tabs_list = document.createElement('div');
@@ -1620,7 +1705,7 @@ async function rename_session(group_id, new_name, title_el) {
     const tab_count = group_data.tabs.length;
     title_el.textContent = `${new_name} (${tab_count} tabs)`;
   } catch (error) {
-    alert('Failed to rename session.');
+    show_toast('Failed to rename session.', 'error');
   }
 }
 
