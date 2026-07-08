@@ -38,28 +38,8 @@ const delete_state = {
 
 const settings = { always_private: false, auto_lock_minutes: 0 };
 
-// auto-lock: tracks last activity time and locks if idle too long
-let auto_lock_timer = null;
-let last_activity_time = Date.now();
-
-function check_auto_lock() {
-  if (settings.auto_lock_minutes <= 0) return;
-  const ms = settings.auto_lock_minutes * 60 * 1000;
-  const idle = Date.now() - last_activity_time;
-  if (idle >= ms) {
-    clear_session_key().then(() => location.reload());
-  } else {
-    auto_lock_timer = setTimeout(check_auto_lock, ms - idle + 1000);
-  }
-}
-
-function reset_auto_lock_timer() {
-  last_activity_time = Date.now();
-  if (auto_lock_timer) clearTimeout(auto_lock_timer);
-  if (settings.auto_lock_minutes <= 0) return;
-  const ms = settings.auto_lock_minutes * 60 * 1000;
-  auto_lock_timer = setTimeout(check_auto_lock, ms);
-}
+// auto-lock is managed by the service worker. the manager page sends
+// 'aegis:reset-timer' on user activity so the countdown restarts.
 
 // tracks the currently dragged tab element for drag-and-drop reordering
 const drag_state = {
@@ -136,18 +116,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     save_settings(settings);
   });
 
-  // auto-lock setting
+  // auto-lock setting (managed by the service worker)
   const auto_lock_select = document.getElementById('auto-lock-select');
   if (auto_lock_select) {
     auto_lock_select.value = String(settings.auto_lock_minutes);
     auto_lock_select.addEventListener('change', (e) => {
       settings.auto_lock_minutes = parseInt(e.target.value, 10) || 0;
       save_settings(settings);
-      if (settings.auto_lock_minutes > 0) {
-        reset_auto_lock_timer();
-      } else if (auto_lock_timer) {
-        clearTimeout(auto_lock_timer);
-      }
+      chrome.runtime.sendMessage({ type: 'aegis:refresh-timer' }).catch(() => {});
     });
   }
 
@@ -302,12 +278,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   paste_urls_button.addEventListener('click', open_paste_modal);
   setup_keyboard_shortcuts();
 
-  // auto-lock: track mouse and keyboard activity, reset timer on each event
+  // auto-lock: track user activity and reset the service worker's countdown
+  function reset_auto_lock_timer_sw() {
+    chrome.runtime.sendMessage({ type: 'aegis:reset-timer' }).catch(() => {});
+  }
+  document.addEventListener('mousemove', reset_auto_lock_timer_sw, { passive: true });
+  document.addEventListener('keydown', reset_auto_lock_timer_sw, { passive: true });
+  document.addEventListener('click', reset_auto_lock_timer_sw, { passive: true });
+  // also do it on scroll, touch, etc.
+  document.addEventListener('touchstart', reset_auto_lock_timer_sw, { passive: true });
   if (settings.auto_lock_minutes > 0) {
-    document.addEventListener('mousemove', reset_auto_lock_timer, { passive: true });
-    document.addEventListener('keydown', reset_auto_lock_timer, { passive: true });
-    document.addEventListener('click', reset_auto_lock_timer, { passive: true });
-    reset_auto_lock_timer();
+    reset_auto_lock_timer_sw();
   }
 
   // neural network training button
@@ -342,10 +323,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // lock button: clear session key, hide everything, show password prompt
+  // lock button: ask the service worker to clear the session, then reset UI
   if (lock_button) {
     lock_button.addEventListener('click', async () => {
-      await clear_session_key();
+      await chrome.runtime.sendMessage({ type: 'aegis:lock' }).catch(() => {});
       selection_state.selected_tabs.clear();
       selection_state.all_tab_elements = [];
 
@@ -456,57 +437,25 @@ document.addEventListener('DOMContentLoaded', async () => {
       manager_unlock_button.textContent = 'Unlocking...';
 
       try {
-        const user = await get_user_by_username(username);
-        if (!user) {
-          // constant-time dummy derivation so a failed username lookup takes
-          // roughly as long as a wrong-password attempt, preventing a timing
-          // side-channel that leaks whether a username exists.
-          const dummy_salt = new Uint8Array(16);
-          await derive_key_from_password('dummy_placeholder', dummy_salt, OLD_ITERATIONS);
-          throw new Error('User not found');
-        }
+        const response = await chrome.runtime.sendMessage({
+          type: 'aegis:unlock', username, password
+        });
+        if (!response?.ok) throw new Error(response?.error || 'Unlock failed');
 
-        const salt = base64_to_array_buffer(user.password_salt);
-        // use the stored iteration count, or fall back to old default if missing
-        const stored_iterations = user.password_iterations || OLD_ITERATIONS;
-        const key = await derive_key_from_password(password, salt, stored_iterations);
-        const decrypted_verifier = await decrypt(user.password_verifier, key);
-
-        if (decrypted_verifier === VERIFIER_STRING) {
-          // silent upgrade: if the account was created with the old iteration
-          // count, re-derive at the new count, re-encrypt the verifier, and save.
-          if (stored_iterations < CURRENT_ITERATIONS) {
-            try {
-              const new_key = await derive_key_from_password(password, salt, CURRENT_ITERATIONS);
-              const new_verifier = await encrypt(VERIFIER_STRING, new_key);
-              user.password_verifier = new_verifier;
-              user.password_iterations = CURRENT_ITERATIONS;
-              await save_user(user);
-              await store_session_key(new_key);
-            } catch (_) {
-              // upgrade failed — fall back to old key so session still works
-              await store_session_key(key);
-            }
-          } else {
-            await store_session_key(key);
-          }
-          await set_session_user(username);
-          active_username = username;
-          password_prompt_view.classList.add('hidden');
-          // restore hidden ui elements after unlock
-          document.querySelector('header')?.classList.remove('hidden');
-          document.getElementById('settings-panel')?.classList.remove('hidden');
-          document.getElementById('delete-account-section')?.classList.remove('hidden');
-          document.getElementById('shortcuts-help')?.classList.remove('hidden');
-          document.getElementById('analytics-panel')?.classList.remove('hidden');
-          const user_label = document.getElementById('current-user-display');
-          if (user_label) user_label.textContent = username;
-          render_page(key);
-        } else {
-          throw new Error('Decryption failed');
-        }
+        active_username = username;
+        const key = await get_session_key();
+        password_prompt_view.classList.add('hidden');
+        // restore hidden ui elements after unlock
+        document.querySelector('header')?.classList.remove('hidden');
+        document.getElementById('settings-panel')?.classList.remove('hidden');
+        document.getElementById('delete-account-section')?.classList.remove('hidden');
+        document.getElementById('shortcuts-help')?.classList.remove('hidden');
+        document.getElementById('analytics-panel')?.classList.remove('hidden');
+        const user_label = document.getElementById('current-user-display');
+        if (user_label) user_label.textContent = username;
+        render_page(key);
       } catch (error) {
-        manager_error.textContent = 'Incorrect password';
+        manager_error.textContent = 'Invalid username or password';
         manager_error.classList.remove('hidden');
         manager_unlock_button.disabled = false;
         manager_unlock_button.textContent = 'Unlock';
@@ -603,6 +552,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // --- change password ---
   const change_pw_btn = document.getElementById('manager-change-password');
+
+  // listen for auto-lock / remote-lock events from the service worker
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.type === 'aegis:locked') {
+      location.reload();
+    }
+  });
   if (change_pw_btn) {
     change_pw_btn.addEventListener('click', show_change_password_modal);
   }
@@ -1666,6 +1622,8 @@ async function handle_delete_confirm() {
     await clear_session_key();
     await set_session_user(null);
     active_username = null;
+    // notify other open pages (popup, other tabs) that the session is gone
+    chrome.runtime.sendMessage({ type: 'aegis:locked' }).catch(() => {});
 
     close_delete_modal();
     confirm_btn.disabled = false;

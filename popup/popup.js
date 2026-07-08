@@ -1,7 +1,7 @@
 import {
   get_all_users, save_user, get_user_by_username,
   get_tab_groups, save_tab_groups,
-  get_session_key, store_session_key, clear_session_key, set_session_user, get_session_user,
+  get_session_key, store_session_key, set_session_user, get_session_user,
   load_model
 } from '../common/storage.js';
 import {
@@ -268,52 +268,18 @@ document.addEventListener('DOMContentLoaded', async () => {
       unlock_button.textContent = 'Unlocking...';
 
       try {
-        const user = await get_user_by_username(username);
-        if (!user) {
-          // constant-time dummy derivation so a failed username lookup takes
-          // roughly as long as a wrong-password attempt, preventing a timing
-          // side-channel that leaks whether a username exists.
-          const dummy_salt = new Uint8Array(16);
-          await derive_key_from_password('dummy_placeholder', dummy_salt, OLD_ITERATIONS);
-          throw new Error('User not found');
-        }
-
-        const salt = base64_to_array_buffer(user.password_salt);
-        // use the stored iteration count, or fall back to old default if missing
-        const stored_iterations = user.password_iterations || OLD_ITERATIONS;
-        const key = await derive_key_from_password(password, salt, stored_iterations);
-        const decrypted_verifier = await decrypt(user.password_verifier, key);
-
-        if (decrypted_verifier === VERIFIER_STRING) {
-          // silent upgrade: if the account was created with the old iteration
-          // count, re-derive at the new count, re-encrypt the verifier, and save.
-          // the user never sees this happen — it just self-upgrades on login.
-          if (stored_iterations < CURRENT_ITERATIONS) {
-            try {
-              const new_key = await derive_key_from_password(password, salt, CURRENT_ITERATIONS);
-              const new_verifier = await encrypt(VERIFIER_STRING, new_key);
-              user.password_verifier = new_verifier;
-              user.password_iterations = CURRENT_ITERATIONS;
-              await save_user(user);
-              // use the new key for this session
-              await store_session_key(new_key);
-            } catch (_) {
-              // upgrade failed — fall back to the old key so the session still works.
-              // it'll try again next unlock.
-              await store_session_key(key);
-            }
-          } else {
-            await store_session_key(key);
-          }
-          await set_session_user(username);
+        const response = await chrome.runtime.sendMessage({
+          type: 'aegis:unlock', username, password
+        });
+        if (response?.ok) {
           locked_view.classList.add('hidden');
           unlocked_view.classList.remove('hidden');
           if (current_user_label) current_user_label.textContent = username;
         } else {
-          throw new Error('Decryption failed');
+          throw new Error(response?.error || 'Unlock failed');
         }
       } catch (error) {
-        unlock_error.textContent = 'Incorrect password';
+        unlock_error.textContent = 'Invalid username or password';
         unlock_error.classList.remove('hidden');
         unlock_button.disabled = false;
         unlock_button.textContent = 'Unlock';
@@ -537,8 +503,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const lock_btn = document.getElementById('popup-lock-button');
   if (lock_btn) {
     lock_btn.addEventListener('click', async () => {
-      await clear_session_key();
-      await set_session_user(null);
+      await chrome.runtime.sendMessage({ type: 'aegis:lock' }).catch(() => {});
       unlocked_view.classList.add('hidden');
       locked_view.classList.remove('hidden');
       unlock_view.classList.remove('hidden');
@@ -546,6 +511,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       refresh_unlock_user_list();
     });
   }
+
+  // listen for auto-lock or lock events from the service worker
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.type === 'aegis:locked') {
+      // switch back to locked view if currently unlocked
+      if (!unlocked_view.classList.contains('hidden')) {
+        unlocked_view.classList.add('hidden');
+        locked_view.classList.remove('hidden');
+        unlock_view.classList.remove('hidden');
+        unlock_password.value = '';
+        refresh_unlock_user_list();
+      }
+    }
+  });
 });
 
 // evaluate password strength and return label, color, and percentage
