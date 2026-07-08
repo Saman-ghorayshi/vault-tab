@@ -35,6 +35,137 @@ function show_toast(message, type = 'info') {
   }, 3500);
 }
 
+// render the account setup form and wire up validation + submit.
+// auto_login=true for first-run (auto-locks into the new account);
+// false when triggered from "Add Account" while already unlocked.
+function render_setup_view(auto_login = true) {
+  const setup_username = document.getElementById('setup-username');
+  const setup_password = document.getElementById('setup-password');
+  const setup_password_confirm = document.getElementById('setup-password-confirm');
+  const setup_button = document.getElementById('setup-button');
+  const setup_error = document.getElementById('setup-error');
+  const setup_view = document.getElementById('setup-view');
+  const locked_view = document.getElementById('locked-view');
+  const unlocked_view = document.getElementById('unlocked-view');
+  const current_user_label = document.getElementById('current-user-label');
+
+  setup_view.classList.remove('hidden');
+  setup_error.classList.add('hidden');
+  setup_username.value = '';
+  setup_password.value = '';
+  setup_password_confirm.value = '';
+  setup_button.disabled = false;
+  setup_button.textContent = 'Create Password';
+
+  setTimeout(() => setup_username.focus(), 100);
+
+  // enter-to-next navigation in setup fields
+  setup_username.addEventListener('keydown', (e) => { if (e.key === 'Enter') setup_password.focus(); });
+  setup_password.addEventListener('keydown', (e) => { if (e.key === 'Enter') setup_password_confirm.focus(); });
+  setup_password_confirm.addEventListener('keydown', (e) => { if (e.key === 'Enter') setup_button.click(); });
+
+  setup_button.addEventListener('click', () =>
+    handle_setup_submit(setup_username, setup_password, setup_password_confirm,
+      setup_button, setup_error, auto_login, setup_view, locked_view, unlocked_view, current_user_label)
+  );
+}
+
+// shared account-creation logic used by first-run and "Add Account".
+async function handle_setup_submit(u_el, p_el, pc_el, btn_el, err_el, auto_login,
+  setup_view, locked_view, unlocked_view, current_user_label) {
+  const username = u_el.value.trim();
+  const password = p_el.value;
+  const confirm_password = pc_el.value;
+
+  err_el.classList.add('hidden');
+  if (!username) {
+    err_el.textContent = 'Please enter a username';
+    err_el.classList.remove('hidden');
+    return;
+  }
+  if (password !== confirm_password) {
+    err_el.textContent = 'Passwords do not match';
+    err_el.classList.remove('hidden');
+    return;
+  }
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    err_el.textContent = 'Password must be at least 8 characters';
+    err_el.classList.remove('hidden');
+    return;
+  }
+
+  // reject duplicate usernames
+  const existing = await get_user_by_username(username);
+  if (existing) {
+    err_el.textContent = 'An account with that username already exists';
+    err_el.classList.remove('hidden');
+    return;
+  }
+
+  btn_el.disabled = true;
+  btn_el.textContent = 'Creating...';
+
+  try {
+    const salt = generate_salt();
+    const key = await derive_key_from_password(password, salt, CURRENT_ITERATIONS);
+    const verifier = await encrypt(VERIFIER_STRING, key);
+
+    const new_user = {
+      username: username,
+      password_salt: array_buffer_to_base64(salt),
+      password_verifier: verifier,
+      password_iterations: CURRENT_ITERATIONS,
+      tab_groups: []
+    };
+    await save_user(new_user);
+
+    if (auto_login) {
+      // first-run: log the user in automatically
+      await store_session_key(key);
+      await set_session_user(username);
+      locked_view.classList.add('hidden');
+      unlocked_view.classList.remove('hidden');
+      if (current_user_label) current_user_label.textContent = username;
+      setup_view.classList.add('hidden');
+    } else {
+      // adding from an already-unlocked session: stay on current account
+      show_toast(`Account "${username}" created. Lock to switch to it.`, 'success');
+      setup_view.classList.add('hidden');
+      // show unlock view so they can lock and re-login as new user
+      document.getElementById('unlock-view').classList.remove('hidden');
+      // refresh the unlock dropdown
+      refresh_unlock_user_list();
+    }
+  } catch (error) {
+    err_el.textContent = `Setup failed: ${error.message}`;
+    err_el.classList.remove('hidden');
+    btn_el.disabled = false;
+    btn_el.textContent = 'Create Password';
+  }
+}
+
+// (re)populate the unlock screen's username dropdown from the current user list.
+async function refresh_unlock_user_list() {
+  const select = document.getElementById('unlock-username-select');
+  const wrapper = document.getElementById('unlock-username-wrapper');
+  if (!select || !wrapper) return;
+  select.innerHTML = '';
+  const users = await get_all_users();
+  if (users.length > 1) {
+    wrapper.classList.remove('hidden');
+    users.forEach(u => {
+      const option = document.createElement('option');
+      option.value = u.username;
+      option.textContent = u.username;
+      select.appendChild(option);
+    });
+    select.value = users[0].username;
+  } else if (users.length === 1) {
+    wrapper.classList.add('hidden');
+    select.value = users[0].username;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const locked_view = document.getElementById('locked-view');
   const unlocked_view = document.getElementById('unlocked-view');
@@ -98,66 +229,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     unlocked_view.classList.remove('hidden');
     if (current_user_label) current_user_label.textContent = session_user;
   } else if (all_users.length === 0) {
-    // first run: no users exist, show setup
-    setup_view.classList.remove('hidden');
-    setTimeout(() => setup_username.focus(), 100);
-
-    setup_username.addEventListener('keydown', (e) => { if (e.key === 'Enter') setup_password.focus(); });
-    setup_password.addEventListener('keydown', (e) => { if (e.key === 'Enter') setup_password_confirm.focus(); });
-    setup_password_confirm.addEventListener('keydown', (e) => { if (e.key === 'Enter') setup_button.click(); });
-
-    setup_button.addEventListener('click', async () => {
-      const username = setup_username.value.trim();
-      const password = setup_password.value;
-      const confirm_password = setup_password_confirm.value;
-
-      setup_error.classList.add('hidden');
-      if (!username) {
-        setup_error.textContent = 'Please enter a username';
-        setup_error.classList.remove('hidden');
-        return;
-      }
-      if (password !== confirm_password) {
-        setup_error.textContent = 'Passwords do not match';
-        setup_error.classList.remove('hidden');
-        return;
-      }
-      if (password.length < MIN_PASSWORD_LENGTH) {
-        setup_error.textContent = 'Password must be at least 8 characters';
-        setup_error.classList.remove('hidden');
-        return;
-      }
-
-      setup_button.disabled = true;
-      setup_button.textContent = 'Creating...';
-
-      try {
-        const salt = generate_salt();
-        const key = await derive_key_from_password(password, salt, CURRENT_ITERATIONS);
-        const verifier = await encrypt(VERIFIER_STRING, key);
-
-        const new_user = {
-          username: username,
-          password_salt: array_buffer_to_base64(salt),
-          password_verifier: verifier,
-          password_iterations: CURRENT_ITERATIONS,
-          tab_groups: []
-        };
-        await save_user(new_user);
-        await store_session_key(key);
-        await set_session_user(username);
-
-        locked_view.classList.add('hidden');
-        unlocked_view.classList.remove('hidden');
-        if (current_user_label) current_user_label.textContent = username;
-      } catch (error) {
-        setup_error.textContent = `Setup failed: ${error.message}`;
-        setup_error.classList.remove('hidden');
-        setup_button.disabled = false;
-        setup_button.textContent = 'Create Password';
-      }
-    });
-  } else {
+      // first run: no users exist, show setup
+      render_setup_view(true);
+    } else {
     // returning user: show unlock with user dropdown
     unlock_view.classList.remove('hidden');
 
