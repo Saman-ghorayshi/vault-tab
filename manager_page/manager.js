@@ -169,12 +169,21 @@ document.addEventListener('DOMContentLoaded', async () => {
           return;
         }
 
-        // build the backup object with metadata
+        // include the user's credentials so the backup can be restored on
+        // a fresh install without the original account existing yet.
+        // salt and verifier are not secret — recovering the password from
+        // them still requires brute-forcing through PBKDF2.
+        const user = await get_user_by_username(active_username);
+
+        // build the backup object with metadata and credentials
         const backup_data = {
           format: 'aegis-backup',
           version: 1,
           exported_at: new Date().toISOString(),
           exported_by: active_username,
+          password_salt: user?.password_salt || null,
+          password_verifier: user?.password_verifier || null,
+          password_iterations: user?.password_iterations || null,
           group_count: groups.length,
           groups: groups
         };
@@ -220,9 +229,35 @@ document.addEventListener('DOMContentLoaded', async () => {
           return;
         }
 
-        // merge: load existing groups, then add backup groups
+        // determine which user the backup belongs to
+        const backup_username = backup_data.exported_by || active_username;
+        let import_target = backup_username;
+
+        // if the backup user doesn't exist locally, create them from the
+        // exported credentials so the original password can still unlock.
+        if (backup_username !== active_username) {
+          const existing = await get_user_by_username(backup_username);
+          if (!existing) {
+            if (!backup_data.password_salt || !backup_data.password_verifier) {
+              alert('Backup file is missing credentials. Cannot restore this account.');
+              import_backup_file.value = '';
+              return;
+            }
+            const new_user = {
+              username: backup_username,
+              password_salt: backup_data.password_salt,
+              password_verifier: backup_data.password_verifier,
+              password_iterations: backup_data.password_iterations || null,
+              tab_groups: []
+            };
+            await save_user(new_user);
+            import_target = backup_username;
+          }
+        }
+
+        // merge: load existing groups for the target user, then add backup groups
         // avoid duplicates by checking group ids
-        const existing_groups = await get_tab_groups(active_username);
+        const existing_groups = await get_tab_groups(import_target);
         const existing_ids = new Set(existing_groups.map(g => g.id));
         let added_count = 0;
 
@@ -233,7 +268,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           }
         }
 
-        await save_tab_groups(active_username, existing_groups);
+        await save_tab_groups(import_target, existing_groups);
         alert(`Imported ${added_count} group(s) from backup.`);
         location.reload();
       } catch (error) {
