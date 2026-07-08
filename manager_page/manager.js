@@ -428,7 +428,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       try {
         const user = await get_user_by_username(username);
-        if (!user) throw new Error('User not found');
+        if (!user) {
+          // constant-time dummy derivation so a failed username lookup takes
+          // roughly as long as a wrong-password attempt, preventing a timing
+          // side-channel that leaks whether a username exists.
+          const dummy_salt = new Uint8Array(16);
+          await derive_key_from_password('dummy_placeholder', dummy_salt, OLD_ITERATIONS);
+          throw new Error('User not found');
+        }
 
         const salt = base64_to_array_buffer(user.password_salt);
         // use the stored iteration count, or fall back to old default if missing
