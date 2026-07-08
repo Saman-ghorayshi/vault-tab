@@ -53,6 +53,7 @@
         </select>
       </label>
       <button id="manager-add-account" class="secondary-button" style="margin-left:auto">+ Add Account</button>
+      <button id="manager-change-password" class="secondary-button" style="margin-left:8px">Change Password</button>
     </div>
 
     <!-- danger zone: account deletion -->
@@ -141,6 +142,39 @@
         <div style="display:flex;gap:10px;justify-content:flex-end">
           <button id="delete-cancel" class="secondary-button">Cancel</button>
           <button id="delete-confirm-button" class="secondary-button" style="color:var(--error);border-color:var(--error)">Delete Forever</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- change-password modal -->
+    <div id="manager-change-pw-modal" class="hidden modal" style="display:none">
+      <div class="modal-content" style="padding:24px;max-width:400px">
+        <h2>Change Password</h2>
+        <div class="form-group">
+          <div class="password-wrapper">
+            <input type="password" id="change-pw-current" placeholder="Current password" />
+            <button type="button" class="password-toggle" data-target="change-pw-current" tabindex="-1">Show</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <div class="password-wrapper">
+            <input type="password" id="change-pw-new" placeholder="New password" />
+            <button type="button" class="password-toggle" data-target="change-pw-new" tabindex="-1">Show</button>
+          </div>
+          <div id="change-pw-strength-bar" class="password-strength-bar"></div>
+          <div id="change-pw-strength-text" class="password-strength-text"></div>
+        </div>
+        <div class="form-group">
+          <div class="password-wrapper">
+            <input type="password" id="change-pw-confirm" placeholder="Confirm new password" />
+            <button type="button" class="password-toggle" data-target="change-pw-confirm" tabindex="-1">Show</button>
+          </div>
+        </div>
+        <div id="change-pw-error" class="error-message hidden"></div>
+        <div id="change-pw-progress" class="hidden" style="margin:8px 0;font-size:13px;color:var(--text-secondary)"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button id="change-pw-cancel" class="secondary-button">Cancel</button>
+          <button id="change-pw-button" class="primary-button">Change Password</button>
         </div>
       </div>
     </div>

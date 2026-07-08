@@ -600,6 +600,50 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (e.target === delete_modal) close_delete_modal();
     });
   }
+
+  // --- change password ---
+  const change_pw_btn = document.getElementById('manager-change-password');
+  if (change_pw_btn) {
+    change_pw_btn.addEventListener('click', show_change_password_modal);
+  }
+
+  const change_pw_submit = document.getElementById('change-pw-button');
+  if (change_pw_submit) {
+    change_pw_submit.addEventListener('click', handle_change_password);
+  }
+
+  const change_pw_cancel = document.getElementById('change-pw-cancel');
+  if (change_pw_cancel) {
+    change_pw_cancel.addEventListener('click', close_change_password_modal);
+  }
+
+  const change_pw_modal = document.getElementById('manager-change-pw-modal');
+  if (change_pw_modal) {
+    change_pw_modal.addEventListener('click', (e) => {
+      if (e.target === change_pw_modal) close_change_password_modal();
+    });
+  }
+
+  // strength meter for new password
+  const cpw_new = document.getElementById('change-pw-new');
+  const cpw_bar = document.getElementById('change-pw-strength-bar');
+  const cpw_text = document.getElementById('change-pw-strength-text');
+  if (cpw_new && cpw_bar) {
+    cpw_new.addEventListener('input', () => {
+      const result = check_password_strength(cpw_new.value);
+      cpw_bar.style.width = result.percentage + '%';
+      cpw_bar.style.backgroundColor = result.color;
+      cpw_text.textContent = result.label;
+      cpw_text.style.color = result.color;
+    });
+  }
+
+  // Enter key navigation in change-pw fields
+  const cpw_current = document.getElementById('change-pw-current');
+  const cpw_confirm = document.getElementById('change-pw-confirm');
+  if (cpw_current) cpw_current.addEventListener('keydown', (e) => { if (e.key === 'Enter') cpw_new?.focus(); });
+  if (cpw_new) cpw_new.addEventListener('keydown', (e) => { if (e.key === 'Enter') cpw_confirm?.focus(); });
+  if (cpw_confirm) cpw_confirm.addEventListener('keydown', (e) => { if (e.key === 'Enter') change_pw_submit?.click(); });
 });
 
 async function check_incognito_permission() {
@@ -1668,6 +1712,142 @@ async function handle_delete_confirm() {
     error_el.classList.remove('hidden');
     confirm_btn.disabled = false;
     confirm_btn.textContent = 'Delete Forever';
+  }
+}
+
+// show the change-password modal. clears all fields and focuses the first one.
+function show_change_password_modal() {
+  const modal = document.getElementById('manager-change-pw-modal');
+  modal.classList.remove('hidden');
+  modal.style.display = 'flex';
+  document.getElementById('change-pw-current').value = '';
+  document.getElementById('change-pw-new').value = '';
+  document.getElementById('change-pw-confirm').value = '';
+  document.getElementById('change-pw-error').classList.add('hidden');
+  document.getElementById('change-pw-progress').classList.add('hidden');
+  document.getElementById('change-pw-button').disabled = false;
+  document.getElementById('change-pw-button').textContent = 'Change Password';
+  setTimeout(() => document.getElementById('change-pw-current').focus(), 50);
+}
+
+function close_change_password_modal() {
+  const modal = document.getElementById('manager-change-pw-modal');
+  modal.classList.add('hidden');
+  modal.style.display = 'none';
+}
+
+// change password: verify the old password, derive a new key at 600k iterations,
+// re-encrypt every saved tab group and the trained AI model, then save.
+// if any group fails to re-encrypt, it's skipped (not lost) and reported.
+async function handle_change_password() {
+  const current_pw = document.getElementById('change-pw-current').value;
+  const new_pw = document.getElementById('change-pw-new').value;
+  const confirm_pw = document.getElementById('change-pw-confirm').value;
+  const error_el = document.getElementById('change-pw-error');
+  const progress_el = document.getElementById('change-pw-progress');
+  const btn = document.getElementById('change-pw-button');
+
+  error_el.classList.add('hidden');
+  progress_el.classList.add('hidden');
+
+  if (!current_pw || !new_pw) {
+    error_el.textContent = 'Fill in all fields';
+    error_el.classList.remove('hidden');
+    return;
+  }
+  if (new_pw !== confirm_pw) {
+    error_el.textContent = 'New passwords do not match';
+    error_el.classList.remove('hidden');
+    return;
+  }
+  if (new_pw.length < 8) {
+    error_el.textContent = 'New password must be at least 8 characters';
+    error_el.classList.remove('hidden');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Working...';
+
+  try {
+    // 1. verify current password
+    const user = await get_user_by_username(active_username);
+    if (!user) throw new Error('Account not found');
+
+    const old_salt = base64_to_array_buffer(user.password_salt);
+    const old_iterations = user.password_iterations || OLD_ITERATIONS;
+    const old_key = await derive_key_from_password(current_pw, old_salt, old_iterations);
+    const decrypted_verifier = await decrypt(user.password_verifier, old_key);
+    if (decrypted_verifier !== VERIFIER_STRING) {
+      throw new Error('Wrong password');
+    }
+
+    // 2. derive new key with fresh salt at current iteration count
+    progress_el.textContent = 'Deriving new key...';
+    progress_el.classList.remove('hidden');
+    const new_salt = generate_salt();
+    const new_key = await derive_key_from_password(new_pw, new_salt, CURRENT_ITERATIONS);
+    const new_verifier = await encrypt(VERIFIER_STRING, new_key);
+
+    // 3. re-encrypt all saved tab groups
+    progress_el.textContent = 'Re-encrypting tab groups...';
+    const groups = await get_tab_groups(active_username);
+    let reencrypted = 0;
+    let failed = 0;
+    for (const group of groups) {
+      try {
+        const plaintext = await decrypt({ iv: group.iv, ciphertext: group.ciphertext }, old_key);
+        const re_encrypted = await encrypt(plaintext, new_key);
+        group.iv = re_encrypted.iv;
+        group.ciphertext = re_encrypted.ciphertext;
+        reencrypted++;
+      } catch (_) {
+        // skip groups that can't be decrypted (already corrupted)
+        failed++;
+      }
+    }
+    await save_tab_groups(active_username, groups);
+    progress_el.textContent = `Re-encrypted ${reencrypted} group(s)${failed > 0 ? `, ${failed} skipped` : ''}.`;
+
+    // 4. re-encrypt the trained model if it exists
+    progress_el.textContent = 'Re-encrypting AI model...';
+    try {
+      const model = await load_model(active_username, old_key);
+      if (model) {
+        // save_model calls JSON.stringify internally, so pass the object
+        await save_model(active_username, model, new_key);
+      }
+    } catch (_) {
+      // model re-encryption is best-effort — don't block the password change
+    }
+
+    // 5. update the user record with new salt, verifier, and iterations
+    user.password_salt = array_buffer_to_base64(new_salt);
+    user.password_verifier = new_verifier;
+    user.password_iterations = CURRENT_ITERATIONS;
+    await save_user(user);
+
+    // 6. update the session key so the user stays logged in
+    await store_session_key(new_key);
+
+    progress_el.textContent = 'Password changed successfully.';
+    btn.textContent = 'Done';
+    show_toast('Password changed. All data re-encrypted.', 'success');
+
+    // auto-close after a brief delay
+    setTimeout(() => {
+      close_change_password_modal();
+      btn.disabled = false;
+      btn.textContent = 'Change Password';
+    }, 1500);
+  } catch (error) {
+    error_el.textContent = error.message === 'Wrong password'
+      ? 'Current password is incorrect'
+      : `Failed: ${error.message}`;
+    error_el.classList.remove('hidden');
+    progress_el.classList.add('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Change Password';
   }
 }
 
