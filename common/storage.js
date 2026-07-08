@@ -1,4 +1,4 @@
-import { export_key, import_key } from './crypto.js';
+import { export_key, import_key, encrypt, decrypt } from './crypto.js';
 import { idb_put_chunked, idb_get_chunked, idb_delete_chunked } from './idb_storage.js';
 
 // storage keys
@@ -95,10 +95,12 @@ export async function delete_user(username) {
   }
   const filtered = users.filter(u => u.username !== username);
   await save_all_users(filtered);
-  // if no users remain, clean up the shared model data
+  // if no users remain, clean up any leftover shared model data
   if (filtered.length === 0) {
     clear_model().catch(() => {});
   }
+  // also clean up this specific user's own model key
+  clear_model(username).catch(() => {});
 }
 
 // IDB marker: when tab_groups are stored in IndexedDB, the user object
@@ -198,38 +200,103 @@ export async function save_settings(settings_object) {
 
 // --- model persistence ---
 
-// save the trained neural network model to local storage.
+// build the per-user model storage key, mirroring the tabgroups_<username>
+// IDB pattern so each account's trained model stays isolated.
+function model_storage_key(username) {
+  return `aegis_model_${username}`;
+}
+
+// save the trained neural network model for a specific user.
+// the serialized model is encrypted with the session key before storage,
+// the same way tab groups are — the model's vocabulary is derived from
+// the user's tab/URL data, so leaving it in plaintext would leak that data
+// to anyone who can read chrome.storage.local.
 // falls back to IndexedDB if chrome.storage.local fails (model can be large).
-export async function save_model(model_data) {
+export async function save_model(username, model_data, session_key) {
+  const key = model_storage_key(username);
+  // encrypt the serialized model so it's ciphertext at rest
+  const encrypted = session_key
+    ? await encrypt(JSON.stringify(model_data), session_key)
+    : JSON.stringify(model_data);
+
   try {
-    await chrome.storage.local.set({ [STORAGE_KEYS.model]: model_data });
-    idb_delete_chunked('aegis_model').catch(() => {});
+    await chrome.storage.local.set({ [key]: encrypted });
+    idb_delete_chunked(key).catch(() => {});
   } catch (_) {
     // chrome.storage.local failed, fall back to IDB
-    const json_str = JSON.stringify(model_data);
-    await idb_put_chunked('aegis_model', json_str);
+    // store the already-encrypted envelope as a JSON string
+    const json_str = JSON.stringify(encrypted);
+    await idb_put_chunked(key, json_str);
     // remove the key from chrome.storage to avoid partial state
+    await chrome.storage.local.remove(key).catch(() => {});
+  }
+
+  // migration: if the old unscoped global model key still exists, delete it
+  // outright. we don't try to guess which account it belonged to — a missing
+  // model just means "not trained yet", which is a safe, cheap-to-recover
+  // state (retraining takes seconds via the Train Model button).
+  migrate_old_global_model().catch(() => {});
+}
+
+// load a user's trained model from local storage or IndexedDB and decrypt it.
+export async function load_model(username, session_key) {
+  const key = model_storage_key(username);
+  const result = await chrome.storage.local.get(key);
+  let stored = result[key];
+
+  // check IndexedDB fallback if not in local storage
+  if (!stored) {
+    try {
+      const json_str = await idb_get_chunked(key);
+      if (json_str) stored = JSON.parse(json_str);
+    } catch (_) {
+      // IDB read failed
+    }
+  }
+
+  if (!stored) return null;
+
+  // decrypt if we have a session key and the stored value looks like an
+  // encrypted envelope { iv, ciphertext }. an old plaintext model (from
+  // before encryption was added) would be a plain object, but it belonged to
+  // the global key which we deleted during migration, so it shouldn't reach
+  // here. still, guard against it defensively.
+  if (session_key && stored && typeof stored === 'object' && stored.iv && stored.ciphertext) {
+    try {
+      const json_str = await decrypt(stored, session_key);
+      return JSON.parse(json_str);
+    } catch (_) {
+      // decryption failed (wrong key or corrupted) — return null so the
+      // caller treats it as "not trained yet" rather than crashing
+      return null;
+    }
+  }
+
+  // if no session key was passed, return the raw envelope (caller handles it)
+  // or if it's somehow already a plain model object, return as-is
+  return stored;
+}
+
+// delete a user's trained model from both storage backends.
+export async function clear_model(username) {
+  // if called with no username, clean up the old global key (legacy)
+  if (!username) {
     await chrome.storage.local.remove(STORAGE_KEYS.model).catch(() => {});
+    await idb_delete_chunked('aegis_model').catch(() => {});
+    return;
   }
+  const key = model_storage_key(username);
+  await chrome.storage.local.remove(key).catch(() => {});
+  await idb_delete_chunked(key).catch(() => {});
 }
 
-// load the trained model from local storage or IndexedDB.
-export async function load_model() {
-  const result = await chrome.storage.local.get(STORAGE_KEYS.model);
-  if (result[STORAGE_KEYS.model]) return result[STORAGE_KEYS.model];
-
-  // check IndexedDB fallback
-  try {
-    const json_str = await idb_get_chunked('aegis_model');
-    if (json_str) return JSON.parse(json_str);
-  } catch (_) {
-    // IDB read failed
-  }
-  return null;
-}
-
-// delete the stored model from both storage backends.
-export async function clear_model() {
+// one-time cleanup of the old unscoped global model key from before
+// per-user scoping was added. silently deletes it — no migration to any
+// specific user because we can't know which account trained it.
+let _global_model_migration_done = false;
+async function migrate_old_global_model() {
+  if (_global_model_migration_done) return;
+  _global_model_migration_done = true;
   await chrome.storage.local.remove(STORAGE_KEYS.model).catch(() => {});
   await idb_delete_chunked('aegis_model').catch(() => {});
 }

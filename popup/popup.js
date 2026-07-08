@@ -265,7 +265,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // AI semantic auto-naming: use the trained embedder to suggest a group name
       try {
-        const saved_model = await load_model();
+        const saved_model = await load_model(session_user, session_key);
         if (saved_model && saved_model.is_trained) {
           const { LocalTabEmbedder } = await import(
             chrome.runtime.getURL('common/embedder.js')

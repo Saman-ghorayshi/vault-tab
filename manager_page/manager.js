@@ -788,9 +788,9 @@ function get_selected_tab_elements() {
 }
 
 function handle_tab_click(e, tab_element, tab_index, group_id) {
-  if (e.target.classList.contains('tab-delete-button') || e.target.classList.contains('tab-link')) return;
+  if (e.target.classList.contains('tab-delete-button')) return;
+  if (e.target.classList.contains('tab-link')) return; // Let the <a> tag open the link naturally
   e.preventDefault();
-
   const all_tabs = selection_state.all_tab_elements;
   const global_index = all_tabs.indexOf(tab_element);
   selection_state.current_group_id = group_id;
@@ -1146,7 +1146,7 @@ function create_group_element(group_id, group_data, group_index = 0) {
   const group_element = document.createElement('div');
   group_element.className = 'group-card';
   group_element.dataset.groupId = group_id;
-  group_element.style.animationDelay = `${group_index * 0.05}s`;
+  group_element.style.animationDelay = `${Math.min(group_index * 0.05, 0.4)}s`; 
 
   const date = new Date(group_data.date);
   const formatted_date = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
@@ -1164,9 +1164,9 @@ function create_group_element(group_id, group_data, group_index = 0) {
   actions_div.className = 'group-actions';
   actions_div.innerHTML =
     '<button class="restore-button secondary-button">Restore All</button>' +
-    '<button class="restore-private-button private-restore-button">Private</button>' +
+    '<button class="restore-private-button private-restore-button">Incognito</button>' + // Clearer intent
     '<button class="export-urls-button secondary-button">Export URLs</button>' +
-    '<button class="delete-button">Delete</button>';
+    '<button class="delete-button">Delete Group</button>'; // Clearer intent
 
   header.appendChild(title_el);
   header.appendChild(actions_div);
@@ -1236,7 +1236,8 @@ function create_group_element(group_id, group_data, group_index = 0) {
 
     const del_btn = document.createElement('button');
     del_btn.className = 'tab-delete-button';
-    del_btn.textContent = 'x';
+    del_btn.innerHTML = '&times;'; // A much cleaner, larger standard HTML X icon
+    del_btn.title = "Delete this tab";
     tab_element.appendChild(del_btn);
 
     tab_element.addEventListener('click', (e) => handle_tab_click(e, tab_element, tab_index, group_id));
@@ -1487,7 +1488,7 @@ async function rename_session(group_id, new_name, title_el) {
 // load a previously trained model from storage and apply clustering
 async function load_saved_model() {
   try {
-    const saved = await load_model();
+    const saved = await load_model(active_username, await get_session_key());
     if (!saved) return;
 
     embedder.deserialize(saved);
@@ -1551,7 +1552,13 @@ async function start_neural_training() {
   try {
     // decrypt all groups to get raw tab data for training
     const session_key = await get_session_key();
-    if (!session_key) return;
+    if (!session_key) {
+      // session was locked between the click and the await. reset the ui so
+      // the train button does not get stuck disabled with 'Training...' text.
+      if (status_el) status_el.textContent = 'Locked';
+      if (train_button) { train_button.disabled = false; train_button.textContent = 'Train Model'; }
+      return;
+    }
 
     const encrypted_groups = await get_tab_groups(active_username);
     const decrypted_groups = [];
@@ -1604,8 +1611,8 @@ async function start_neural_training() {
         }
         update_loss_chart(loss_chart, embedder.loss_history);
 
-        // persist the trained model to storage
-        save_model(embedder.serialize());
+        // persist the trained model to storage (per-user, encrypted at rest)
+        save_model(active_username, embedder.serialize(), session_key);
 
         // apply clustering to the rendered tabs
         apply_clustering_to_tabs(decrypted_groups);
