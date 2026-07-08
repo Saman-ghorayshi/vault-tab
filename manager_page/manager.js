@@ -1,9 +1,9 @@
 import {
-  get_all_users, get_user_by_username, save_user,
+  get_all_users, get_user_by_username, save_user, delete_user,
   get_tab_groups, save_tab_groups,
   get_session_key, store_session_key, clear_session_key,
   get_session_user, set_session_user,
-  get_settings, save_settings, save_model, load_model
+  get_settings, save_settings, save_model, load_model, clear_model
 } from '../common/storage.js';
 import {
   derive_key_from_password, decrypt, encrypt,
@@ -359,6 +359,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       groups_container.innerHTML = '';
       groups_container.classList.add('hidden');
       document.getElementById('settings-panel')?.classList.add('hidden');
+      document.getElementById('delete-account-section')?.classList.add('hidden');
       document.querySelector('header')?.classList.add('hidden');
       document.getElementById('shortcuts-help')?.classList.add('hidden');
       document.getElementById('action-panel')?.classList.add('hidden');
@@ -400,6 +401,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // locked on initial load: hide everything except the password prompt
     loading_message.classList.add('hidden');
     document.getElementById('settings-panel')?.classList.add('hidden');
+    document.getElementById('delete-account-section')?.classList.add('hidden');
     document.querySelector('header')?.classList.add('hidden');
     document.getElementById('shortcuts-help')?.classList.add('hidden');
     password_prompt_view.classList.remove('hidden');
@@ -494,6 +496,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           // restore hidden ui elements after unlock
           document.querySelector('header')?.classList.remove('hidden');
           document.getElementById('settings-panel')?.classList.remove('hidden');
+          document.getElementById('delete-account-section')?.classList.remove('hidden');
           document.getElementById('shortcuts-help')?.classList.remove('hidden');
           document.getElementById('analytics-panel')?.classList.remove('hidden');
           const user_label = document.getElementById('current-user-display');
@@ -567,6 +570,34 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (setup_modal) {
     setup_modal.addEventListener('click', (e) => {
       if (e.target === setup_modal) close_manager_setup_modal();
+    });
+  }
+
+  // --- delete account ---
+  const show_delete_btn = document.getElementById('manager-show-delete-modal');
+  if (show_delete_btn) {
+    show_delete_btn.addEventListener('click', show_delete_modal);
+  }
+
+  const delete_confirm_btn = document.getElementById('delete-confirm-button');
+  if (delete_confirm_btn) {
+    delete_confirm_btn.addEventListener('click', handle_delete_confirm);
+  }
+
+  const delete_cancel_btn = document.getElementById('delete-cancel');
+  if (delete_cancel_btn) {
+    delete_cancel_btn.addEventListener('click', close_delete_modal);
+  }
+
+  const delete_pw = document.getElementById('delete-confirm-password');
+  if (delete_pw) {
+    delete_pw.addEventListener('keydown', (e) => { if (e.key === 'Enter') delete_confirm_btn?.click(); });
+  }
+
+  const delete_modal = document.getElementById('manager-delete-modal');
+  if (delete_modal) {
+    delete_modal.addEventListener('click', (e) => {
+      if (e.target === delete_modal) close_delete_modal();
     });
   }
 });
@@ -1507,6 +1538,137 @@ function close_manager_setup_modal() {
   }
   document.getElementById('manager-setup-button').disabled = false;
   document.getElementById('manager-setup-button').textContent = 'Create Account';
+}
+
+// show the delete-account confirmation modal. gathers live stats so the user
+// sees exactly what they're about to lose before confirming.
+async function show_delete_modal() {
+  const modal = document.getElementById('manager-delete-modal');
+  const name_el = document.getElementById('delete-account-name');
+  const group_count_el = document.getElementById('delete-group-count');
+  const model_status_el = document.getElementById('delete-model-status');
+  const pw_input = document.getElementById('delete-confirm-password');
+  const error_el = document.getElementById('delete-error');
+
+  name_el.textContent = active_username || '(unknown)';
+  error_el.classList.add('hidden');
+  pw_input.value = '';
+
+  try {
+    const groups = await get_tab_groups(active_username);
+    group_count_el.textContent = groups.length;
+  } catch (_) {
+    group_count_el.textContent = '?';
+  }
+
+  try {
+    const session_key = await get_session_key();
+    const model = await load_model(active_username, session_key);
+    model_status_el.textContent = (model && model.is_trained) ? 'yes, will be deleted' : 'none';
+  } catch (_) {
+    model_status_el.textContent = 'unknown';
+  }
+
+  modal.classList.remove('hidden');
+  modal.style.display = 'flex';
+  setTimeout(() => pw_input.focus(), 50);
+}
+
+// close the delete-account modal without deleting.
+function close_delete_modal() {
+  const modal = document.getElementById('manager-delete-modal');
+  modal.classList.add('hidden');
+  modal.style.display = 'none';
+  document.getElementById('delete-confirm-password').value = '';
+  document.getElementById('delete-error').classList.add('hidden');
+}
+
+// confirm button handler: re-authenticate the user, then permanently delete.
+async function handle_delete_confirm() {
+  const pw_input = document.getElementById('delete-confirm-password');
+  const error_el = document.getElementById('delete-error');
+  const confirm_btn = document.getElementById('delete-confirm-button');
+
+  const password = pw_input.value;
+  if (!password) {
+    error_el.textContent = 'Enter your password to confirm';
+    error_el.classList.remove('hidden');
+    return;
+  }
+
+  confirm_btn.disabled = true;
+  confirm_btn.textContent = 'Deleting...';
+  error_el.classList.add('hidden');
+
+  try {
+    // re-auth: verify the password before deleting
+    const user = await get_user_by_username(active_username);
+    if (!user) throw new Error('Account not found');
+
+    const salt = base64_to_array_buffer(user.password_salt);
+    const iterations = user.password_iterations || OLD_ITERATIONS;
+    const key = await derive_key_from_password(password, salt, iterations);
+    const decrypted_verifier = await decrypt(user.password_verifier, key);
+
+    if (decrypted_verifier !== VERIFIER_STRING) {
+      throw new Error('Wrong password');
+    }
+
+    // password confirmed — delete everything for this user
+    await delete_user(active_username);
+    await clear_model(active_username);
+
+    // clear session and return to unlock screen
+    await clear_session_key();
+    await set_session_user(null);
+    active_username = null;
+
+    close_delete_modal();
+    confirm_btn.disabled = false;
+    confirm_btn.textContent = 'Delete Forever';
+
+    // hide all unlocked UI
+    document.getElementById('groups-container')?.classList.add('hidden');
+    document.getElementById('analytics-panel')?.classList.add('hidden');
+    document.getElementById('settings-panel')?.classList.add('hidden');
+    document.getElementById('delete-account-section')?.classList.add('hidden');
+    document.querySelector('header')?.classList.add('hidden');
+    document.getElementById('shortcuts-help')?.classList.add('hidden');
+    document.getElementById('action-panel')?.classList.add('hidden');
+    document.getElementById('password-prompt-view').classList.remove('hidden');
+
+    // repopulate unlock dropdown
+    const remaining = await get_all_users();
+    const select = document.getElementById('manager-username-select');
+    const wrapper = document.getElementById('manager-username-wrapper');
+    select.innerHTML = '';
+    if (remaining.length === 0) {
+      // no users left: show setup modal
+      document.getElementById('password-prompt-view').classList.add('hidden');
+      show_manager_setup_modal(false);
+    } else if (remaining.length > 1) {
+      wrapper?.classList.remove('hidden');
+      remaining.forEach(u => {
+        const opt = document.createElement('option');
+        opt.value = u.username;
+        opt.textContent = u.username;
+        select.appendChild(opt);
+      });
+      select.value = remaining[0].username;
+    } else {
+      wrapper?.classList.add('hidden');
+      select.value = remaining[0].username;
+    }
+
+    show_toast('Account deleted.', 'info');
+  } catch (error) {
+    error_el.textContent = error.message === 'Wrong password'
+      ? 'Incorrect password'
+      : `Delete failed: ${error.message}`;
+    error_el.classList.remove('hidden');
+    confirm_btn.disabled = false;
+    confirm_btn.textContent = 'Delete Forever';
+  }
 }
 
 function create_group_element(group_id, group_data, group_index = 0) {

@@ -55,6 +55,17 @@
       <button id="manager-add-account" class="secondary-button" style="margin-left:auto">+ Add Account</button>
     </div>
 
+    <!-- danger zone: account deletion -->
+    <div id="delete-account-section" class="hidden" style="margin-top:16px;padding:16px;border:1px solid var(--error);border-radius:8px;background:rgba(244,67,54,0.05)">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <strong style="color:var(--error)">Delete Account</strong>
+          <p style="margin:4px 0 0;font-size:13px;color:var(--text-secondary)">Permanently delete your account and all saved tabs.</p>
+        </div>
+        <button id="manager-show-delete-modal" class="secondary-button" style="color:var(--error);border-color:var(--error)">Delete Account</button>
+      </div>
+    </div>
+
     <div id="loading-message" class="loading-message">
       <p>Loading your saved tabs...</p>
     </div>
@@ -104,6 +115,32 @@
         <div style="display:flex;gap:10px;justify-content:flex-end">
           <button id="manager-setup-cancel" class="secondary-button">Cancel</button>
           <button id="manager-setup-button" class="primary-button">Create Account</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- delete-account confirmation modal -->
+    <div id="manager-delete-modal" class="hidden modal" style="display:none">
+      <div class="modal-content" style="padding:24px;max-width:420px">
+        <h2>Delete Account</h2>
+        <div id="delete-account-details" class="modal-body" style="border:none;padding:0">
+          <p>This will permanently delete the account <strong id="delete-account-name"></strong> and all its data:</p>
+          <ul style="margin:12px 0 16px;padding-left:20px;line-height:1.8">
+            <li><span id="delete-group-count">0</span> saved tab group(s)</li>
+            <li>Trained AI model: <span id="delete-model-status">none</span></li>
+          </ul>
+          <p style="color:var(--error);font-size:13px">This action cannot be undone.</p>
+        </div>
+        <div class="form-group" style="margin-bottom:16px">
+          <div class="password-wrapper">
+            <input type="password" id="delete-confirm-password" placeholder="Enter your password to confirm" />
+            <button type="button" class="password-toggle" data-target="delete-confirm-password" tabindex="-1">Show</button>
+          </div>
+          <div id="delete-error" class="error-message hidden"></div>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button id="delete-cancel" class="secondary-button">Cancel</button>
+          <button id="delete-confirm-button" class="secondary-button" style="color:var(--error);border-color:var(--error)">Delete Forever</button>
         </div>
       </div>
     </div>
