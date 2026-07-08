@@ -32,8 +32,18 @@ export function generate_iv() {
   return crypto.getRandomValues(new Uint8Array(12));
 }
 
+// iteration counts for PBKDF2-HMAC-SHA256
+// old accounts were created at 310000; we now use 600000 per current OWASP guidance.
+// existing accounts are transparently upgraded on the next successful unlock.
+export const OLD_ITERATIONS = 310000;
+export const CURRENT_ITERATIONS = 600000;
+
 // derive an AES-GCM key from a password using PBKDF2
-export async function derive_key_from_password(password, salt) {
+// iterations must be passed by the caller — the function no longer hardcodes it.
+export async function derive_key_from_password(password, salt, iterations) {
+  // if iterations is not provided, fall back to the old default so existing
+  // call sites that haven't been updated yet don't break
+  const iter = iterations || OLD_ITERATIONS;
   const encoder = new TextEncoder();
   const key_material = await crypto.subtle.importKey(
     'raw',
@@ -47,7 +57,7 @@ export async function derive_key_from_password(password, salt) {
     {
       name: 'PBKDF2',
       salt: salt,
-      iterations: 310000,
+      iterations: iter,
       hash: 'SHA-256'
     },
     key_material,

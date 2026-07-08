@@ -7,7 +7,8 @@ import {
 } from '../common/storage.js';
 import {
   derive_key_from_password, decrypt, encrypt,
-  base64_to_array_buffer
+  base64_to_array_buffer,
+  OLD_ITERATIONS, CURRENT_ITERATIONS
 } from '../common/crypto.js';
 import { is_restorable_url, get_url_status } from '../common/urls.js';
 import { LocalTabEmbedder, calculate_cosine_similarity, kmeans_cluster } from '../common/embedder.js';
@@ -395,11 +396,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!user) throw new Error('User not found');
 
         const salt = base64_to_array_buffer(user.password_salt);
-        const key = await derive_key_from_password(password, salt);
+        // use the stored iteration count, or fall back to old default if missing
+        const stored_iterations = user.password_iterations || OLD_ITERATIONS;
+        const key = await derive_key_from_password(password, salt, stored_iterations);
         const decrypted_verifier = await decrypt(user.password_verifier, key);
 
         if (decrypted_verifier === VERIFIER_STRING) {
-          await store_session_key(key);
+          // silent upgrade: if the account was created with the old iteration
+          // count, re-derive at the new count, re-encrypt the verifier, and save.
+          if (stored_iterations < CURRENT_ITERATIONS) {
+            try {
+              const new_key = await derive_key_from_password(password, salt, CURRENT_ITERATIONS);
+              const new_verifier = await encrypt(VERIFIER_STRING, new_key);
+              user.password_verifier = new_verifier;
+              user.password_iterations = CURRENT_ITERATIONS;
+              await save_user(user);
+              await store_session_key(new_key);
+            } catch (_) {
+              // upgrade failed — fall back to old key so session still works
+              await store_session_key(key);
+            }
+          } else {
+            await store_session_key(key);
+          }
           await set_session_user(username);
           active_username = username;
           password_prompt_view.classList.add('hidden');

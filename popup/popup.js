@@ -6,7 +6,8 @@ import {
 } from '../common/storage.js';
 import {
   generate_salt, derive_key_from_password, encrypt, decrypt,
-  array_buffer_to_base64, base64_to_array_buffer
+  array_buffer_to_base64, base64_to_array_buffer,
+  OLD_ITERATIONS, CURRENT_ITERATIONS
 } from '../common/crypto.js';
 import { get_url_status, derive_title_from_url } from '../common/urls.js';
 
@@ -111,13 +112,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       try {
         const salt = generate_salt();
-        const key = await derive_key_from_password(password, salt);
+        const key = await derive_key_from_password(password, salt, CURRENT_ITERATIONS);
         const verifier = await encrypt(VERIFIER_STRING, key);
 
         const new_user = {
           username: username,
           password_salt: array_buffer_to_base64(salt),
           password_verifier: verifier,
+          password_iterations: CURRENT_ITERATIONS,
           tab_groups: []
         };
         await save_user(new_user);
@@ -175,11 +177,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!user) throw new Error('User not found');
 
         const salt = base64_to_array_buffer(user.password_salt);
-        const key = await derive_key_from_password(password, salt);
+        // use the stored iteration count, or fall back to old default if missing
+        const stored_iterations = user.password_iterations || OLD_ITERATIONS;
+        const key = await derive_key_from_password(password, salt, stored_iterations);
         const decrypted_verifier = await decrypt(user.password_verifier, key);
 
         if (decrypted_verifier === VERIFIER_STRING) {
-          await store_session_key(key);
+          // silent upgrade: if the account was created with the old iteration
+          // count, re-derive at the new count, re-encrypt the verifier, and save.
+          // the user never sees this happen — it just self-upgrades on login.
+          if (stored_iterations < CURRENT_ITERATIONS) {
+            try {
+              const new_key = await derive_key_from_password(password, salt, CURRENT_ITERATIONS);
+              const new_verifier = await encrypt(VERIFIER_STRING, new_key);
+              user.password_verifier = new_verifier;
+              user.password_iterations = CURRENT_ITERATIONS;
+              await save_user(user);
+              // use the new key for this session
+              await store_session_key(new_key);
+            } catch (_) {
+              // upgrade failed — fall back to the old key so the session still works.
+              // it'll try again next unlock.
+              await store_session_key(key);
+            }
+          } else {
+            await store_session_key(key);
+          }
           await set_session_user(username);
           locked_view.classList.add('hidden');
           unlocked_view.classList.remove('hidden');
