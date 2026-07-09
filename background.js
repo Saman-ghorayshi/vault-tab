@@ -201,6 +201,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       case 'aegis:lock': {
+        // clear any pending unlock state too — if the user verified their
+        // password but locked before finishing the webauthn second factor,
+        // the derived key sitting in pending_unlock must not survive the lock.
+        pending_unlock = null;
+        pending_unlock_credential = null;
         await cancel_auto_lock_timer();
         await clear_session_key();
         chrome.runtime.sendMessage({ type: 'aegis:locked' }).catch(() => {});
