@@ -403,83 +403,84 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     setTimeout(() => manager_password.focus(), 100);
-
-    manager_password.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') manager_unlock_button.click();
-    });
-
-    manager_unlock_button.addEventListener('click', async () => {
-      const current_users = await get_all_users();
-      const password = manager_password.value;
-      const username = current_users.length === 1
-        ? current_users[0].username
-        : manager_username_select?.value;
-      manager_error.classList.add('hidden');
-      if (!password) {
-        manager_error.textContent = 'Please enter your password';
-        manager_error.classList.remove('hidden');
-        return;
-      }
-      if (!username) {
-        manager_error.textContent = 'Please select a user';
-        manager_error.classList.remove('hidden');
-        return;
-      }
-
-      manager_unlock_button.disabled = true;
-      manager_unlock_button.textContent = 'Unlocking...';
-
-      try {
-              // phase 1: password verification
-              const response = await chrome.runtime.sendMessage({
-                type: 'aegis:unlock', username, password
-              });
-
-              if (response?.needs_webauthn) {
-                // WebAuthn second-factor needed
-                const { webauthn_credential_id, challenge } = response;
-                const webauthn_module = await import(
-                  chrome.runtime.getURL('common/webauthn.js')
-                );
-                const options = webauthn_module.make_assertion_options(
-                  challenge, webauthn_credential_id
-                );
-                manager_unlock_button.textContent = 'Verify with passkey...';
-
-                const credential = await navigator.credentials.get({ publicKey: options });
-                if (!credential) throw new Error('Passkey cancelled');
-
-                const serialized = webauthn_module.serialize_assertion(credential);
-                const verify_response = await chrome.runtime.sendMessage({
-                  type: 'aegis:unlock-webauthn',
-                  assertion: serialized
-                });
-                if (!verify_response?.ok) throw new Error('Passkey verification failed');
-              } else if (!response?.ok) {
-                throw new Error(response?.error || 'Unlock failed');
-              }
-
-        active_username = username;
-        const key = await get_session_key();
-        password_prompt_view.classList.add('hidden');
-        // restore hidden ui elements after unlock
-        document.querySelector('header')?.classList.remove('hidden');
-        document.getElementById('settings-panel')?.classList.remove('hidden');
-        document.getElementById('delete-account-section')?.classList.remove('hidden');
-        document.getElementById('shortcuts-help')?.classList.remove('hidden');
-        document.getElementById('analytics-panel')?.classList.remove('hidden');
-        const user_label = document.getElementById('current-user-display');
-        if (user_label) user_label.textContent = username;
-        render_page(key);
-      } catch (error) {
-        manager_error.textContent = 'Invalid username or password';
-        manager_error.classList.remove('hidden');
-      } finally {
-        manager_unlock_button.disabled = false;
-        manager_unlock_button.textContent = 'Unlock';
-      }
-    });
   }
+
+  manager_password.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') manager_unlock_button.click();
+  });
+
+  manager_unlock_button.addEventListener('click', async () => {
+    const current_users = await get_all_users();
+    const password = manager_password.value;
+    const select_el = document.getElementById('manager-username-select');
+    const username = current_users.length === 1
+      ? current_users[0].username
+      : select_el?.value;
+    manager_error.classList.add('hidden');
+    if (!password) {
+      manager_error.textContent = 'Please enter your password';
+      manager_error.classList.remove('hidden');
+      return;
+    }
+    if (!username) {
+      manager_error.textContent = 'Please select a user';
+      manager_error.classList.remove('hidden');
+      return;
+    }
+
+    manager_unlock_button.disabled = true;
+    manager_unlock_button.textContent = 'Unlocking...';
+
+    try {
+      // phase 1: password verification
+      const response = await chrome.runtime.sendMessage({
+        type: 'aegis:unlock', username, password
+      });
+
+      if (response?.needs_webauthn) {
+        // WebAuthn second-factor needed
+        const { webauthn_credential_id, challenge } = response;
+        const webauthn_module = await import(
+          chrome.runtime.getURL('common/webauthn.js')
+        );
+        const options = webauthn_module.make_assertion_options(
+          challenge, webauthn_credential_id
+        );
+        manager_unlock_button.textContent = 'Verify with passkey...';
+
+        const credential = await navigator.credentials.get({ publicKey: options });
+        if (!credential) throw new Error('Passkey cancelled');
+
+        const serialized = webauthn_module.serialize_assertion(credential);
+        const verify_response = await chrome.runtime.sendMessage({
+          type: 'aegis:unlock-webauthn',
+          assertion: serialized
+        });
+        if (!verify_response?.ok) throw new Error('Passkey verification failed');
+      } else if (!response?.ok) {
+        throw new Error(response?.error || 'Unlock failed');
+      }
+
+      active_username = username;
+      const key = await get_session_key();
+      password_prompt_view.classList.add('hidden');
+      // restore hidden ui elements after unlock
+      document.querySelector('header')?.classList.remove('hidden');
+      document.getElementById('settings-panel')?.classList.remove('hidden');
+      document.getElementById('delete-account-section')?.classList.remove('hidden');
+      document.getElementById('shortcuts-help')?.classList.remove('hidden');
+      document.getElementById('analytics-panel')?.classList.remove('hidden');
+      const user_label = document.getElementById('current-user-display');
+      if (user_label) user_label.textContent = username;
+      render_page(key);
+    } catch (error) {
+      manager_error.textContent = 'Invalid username or password';
+      manager_error.classList.remove('hidden');
+    } finally {
+      manager_unlock_button.disabled = false;
+      manager_unlock_button.textContent = 'Unlock';
+    }
+  });
 
   // setup modal controls: "Create a new account instead" link on unlock screen
   const show_setup_link = document.getElementById('manager-show-setup-link');
