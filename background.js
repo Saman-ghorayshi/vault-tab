@@ -318,6 +318,55 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   create_context_menu();
 })();
 
+// show a visual toast notification on the target webpage when saving a single tab
+async function show_in_page_toast(tab_id, message) {
+  if (!tab_id) return;
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab_id },
+      func: (msg) => {
+        const existing = document.getElementById('aegis-tab-toast-notification');
+        if (existing) existing.remove();
+
+        const toast = document.createElement('div');
+        toast.id = 'aegis-tab-toast-notification';
+        toast.textContent = msg;
+        Object.assign(toast.style, {
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          zIndex: '2147483647',
+          backgroundColor: '#1e293b',
+          color: '#38bdf8',
+          border: '1px solid #334155',
+          padding: '12px 18px',
+          borderRadius: '8px',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          fontSize: '14px',
+          fontWeight: '600',
+          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)',
+          transition: 'opacity 0.3s ease, transform 0.3s ease',
+          opacity: '0',
+          transform: 'translateY(-10px)'
+        });
+        document.body.appendChild(toast);
+        requestAnimationFrame(() => {
+          toast.style.opacity = '1';
+          toast.style.transform = 'translateY(0)';
+        });
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          toast.style.transform = 'translateY(-10px)';
+          setTimeout(() => toast.remove(), 300);
+        }, 2500);
+      },
+      args: [message]
+    });
+  } catch (_) {
+    // ignore pages where script injection is restricted (e.g. chrome://)
+  }
+}
+
 // create or recreate the context menu item
 function create_context_menu() {
   chrome.contextMenus.removeAll(() => {
@@ -378,6 +427,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       ciphertext: encrypted.ciphertext
     });
     await save_tab_groups(session_user, groups);
+    await show_in_page_toast(tab.id, '🛡️ Saved to Aegis Tab!');
   } catch (error) {
     // context menu save failed -- cannot surface UI from service worker
     // error is logged to the extension's background console
@@ -427,6 +477,7 @@ chrome.commands.onCommand.addListener(async (command) => {
         ciphertext: encrypted.ciphertext
       });
       await save_tab_groups(session_user, groups);
+      await show_in_page_toast(active_tab.id, '🛡️ Saved to Aegis Tab!');
     } else if (command === 'save_all_tabs') {
       const all_tabs = await chrome.tabs.query({ currentWindow: true }) || [];
       const manager_url = chrome.runtime.getURL('manager_page/manager.html');
