@@ -36,11 +36,16 @@ A Chrome extension that securely saves, manages, and restores browser tabs using
 3. Your password derives an encryption key via PBKDF2 — it is never stored
 
 ### Saving tabs
-- **Save All Tabs** — Encrypts and saves all tabs in the current window, then closes them
-- **Save This Tab** — Saves only the currently active tab
+- **Global Keyboard Shortcuts (any webpage)**:
+  - <kbd>Ctrl+Shift+S</kbd> (<kbd>Cmd+Shift+S</kbd> on Mac) — Instantly encrypts and saves the current tab
+  - <kbd>Alt+Shift+S</kbd> — Instantly encrypts and saves all tabs in the window, then opens the manager page
+  - *(Shortcuts can be customized anytime in Chrome at `chrome://extensions/shortcuts`)*
+- **Save All Tabs button** — Encrypts and saves all tabs in the current window, then closes them
+- **Save This Tab button** — Saves only the currently active tab
 - **Right-click > Save to Aegis Tab** — Save the current page or a link via context menu
 
-### Managing tabs
+### Managing tabs & Accounts
+- Create multiple isolated user accounts (`+ Add Account`) and switch between them cleanly from the lock screen dropdown
 - Click **View Saved Tabs** to open the manager page
 - Use **Search** to filter tabs (toggle **Semantic** for meaning-based search after training)
 - Double-click a session title to rename it
@@ -50,8 +55,15 @@ A Chrome extension that securely saves, manages, and restores browser tabs using
 - Select tabs (click, Ctrl+Click, Shift+Click) to use the floating action panel
 - Click **Lock** to clear the session key and re-lock
 
-### Keyboard shortcuts (manager page)
+### Keyboard shortcuts
 
+#### Global Browser Shortcuts (any webpage)
+| Key | Action |
+|-----|--------|
+| <kbd>Ctrl+Shift+S</kbd> (<kbd>Cmd+Shift+S</kbd>) | Save current tab to Aegis Tab |
+| <kbd>Alt+Shift+S</kbd> | Save all tabs in window to Aegis Tab |
+
+#### Manager Page Navigation
 | Key | Action |
 |-----|--------|
 | J | Move focus down |
