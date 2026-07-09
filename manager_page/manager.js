@@ -437,10 +437,34 @@ document.addEventListener('DOMContentLoaded', async () => {
       manager_unlock_button.textContent = 'Unlocking...';
 
       try {
-        const response = await chrome.runtime.sendMessage({
-          type: 'aegis:unlock', username, password
-        });
-        if (!response?.ok) throw new Error(response?.error || 'Unlock failed');
+              // phase 1: password verification
+              const response = await chrome.runtime.sendMessage({
+                type: 'aegis:unlock', username, password
+              });
+
+              if (response?.needs_webauthn) {
+                // WebAuthn second-factor needed
+                const { webauthn_credential_id, challenge } = response;
+                const webauthn_module = await import(
+                  chrome.runtime.getURL('common/webauthn.js')
+                );
+                const options = webauthn_module.make_assertion_options(
+                  challenge, webauthn_credential_id
+                );
+                manager_unlock_button.textContent = 'Verify with passkey...';
+
+                const credential = await navigator.credentials.get({ publicKey: options });
+                if (!credential) throw new Error('Passkey cancelled');
+
+                const serialized = webauthn_module.serialize_assertion(credential);
+                const verify_response = await chrome.runtime.sendMessage({
+                  type: 'aegis:unlock-webauthn',
+                  assertion: serialized
+                });
+                if (!verify_response?.ok) throw new Error('Passkey verification failed');
+              } else if (!response?.ok) {
+                throw new Error(response?.error || 'Unlock failed');
+              }
 
         active_username = username;
         const key = await get_session_key();
@@ -577,6 +601,52 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (change_pw_modal) {
     change_pw_modal.addEventListener('click', (e) => {
       if (e.target === change_pw_modal) close_change_password_modal();
+    });
+  }
+
+  // --- passkey registration ---
+  const passkey_btn = document.getElementById('manager-register-passkey');
+  if (passkey_btn) {
+    passkey_btn.addEventListener('click', async () => {
+      try {
+        passkey_btn.disabled = true;
+        passkey_btn.textContent = 'Registering...';
+
+        // 1. ask the service worker for a challenge
+        const start_response = await chrome.runtime.sendMessage({
+          type: 'aegis:register-webauthn-start'
+        });
+        if (!start_response?.ok) throw new Error(start_response?.error || 'Failed to start registration');
+
+        // 2. build options and call the WebAuthn API
+        const webauthn_module = await import(
+          chrome.runtime.getURL('common/webauthn.js')
+        );
+        const options = webauthn_module.make_registration_options(start_response.challenge);
+        const credential = await navigator.credentials.create({ publicKey: options });
+        if (!credential) throw new Error('Registration cancelled');
+
+        // 3. serialize and send to the service worker for storage
+        const serialized = webauthn_module.serialize_credential(credential);
+        const complete_response = await chrome.runtime.sendMessage({
+          type: 'aegis:register-webauthn-complete',
+          credential_id: serialized.credential_id,
+          public_key_cbor: serialized.public_key_cbor
+        });
+        if (!complete_response?.ok) throw new Error(complete_response?.error || 'Failed to store credential');
+
+        show_toast('Passkey registered successfully!', 'success');
+        passkey_btn.textContent = 'Passkey Registered';
+        passkey_btn.disabled = true;
+        setTimeout(() => {
+          passkey_btn.textContent = 'Register Passkey';
+          passkey_btn.disabled = false;
+        }, 3000);
+      } catch (error) {
+        show_toast(error.message === 'Registration cancelled' ? 'Passkey registration cancelled.' : `Passkey failed: ${error.message}`, 'error');
+        passkey_btn.textContent = 'Register Passkey';
+        passkey_btn.disabled = false;
+      }
     });
   }
 
@@ -1747,25 +1817,25 @@ async function handle_change_password() {
     const new_key = await derive_key_from_password(new_pw, new_salt, CURRENT_ITERATIONS);
     const new_verifier = await encrypt(VERIFIER_STRING, new_key);
 
-    // 3. re-encrypt all saved tab groups
+    // 3. re-encrypt all saved tab groups — abort entirely if ANY group
+    //    fails to decrypt. the plan requires all-or-nothing: if we
+    //    overwrote the salt/verifier while some groups stayed encrypted
+    //    under the old key, those groups would be permanently lost.
     progress_el.textContent = 'Re-encrypting tab groups...';
     const groups = await get_tab_groups(active_username);
     let reencrypted = 0;
-    let failed = 0;
     for (const group of groups) {
-      try {
-        const plaintext = await decrypt({ iv: group.iv, ciphertext: group.ciphertext }, old_key);
-        const re_encrypted = await encrypt(plaintext, new_key);
-        group.iv = re_encrypted.iv;
-        group.ciphertext = re_encrypted.ciphertext;
-        reencrypted++;
-      } catch (_) {
-        // skip groups that can't be decrypted (already corrupted)
-        failed++;
-      }
+      const plaintext = await decrypt(
+        { iv: group.iv, ciphertext: group.ciphertext }, old_key
+      );
+      const re_encrypted = await encrypt(plaintext, new_key);
+      group.iv = re_encrypted.iv;
+      group.ciphertext = re_encrypted.ciphertext;
+      reencrypted++;
     }
+    // every group re-encrypted successfully — safe to write the new groups
     await save_tab_groups(active_username, groups);
-    progress_el.textContent = `Re-encrypted ${reencrypted} group(s)${failed > 0 ? `, ${failed} skipped` : ''}.`;
+    progress_el.textContent = `Re-encrypted ${reencrypted} group(s).`;
 
     // 4. re-encrypt the trained model if it exists
     progress_el.textContent = 'Re-encrypting AI model...';
