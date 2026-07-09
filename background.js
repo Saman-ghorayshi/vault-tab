@@ -63,12 +63,22 @@ async function cancel_auto_lock_timer() {
 
 // fire the auto-lock when the alarm fires — this works even if the
 // service worker was suspended and chrome woke it up just for this.
+// also handles challenge expiry alarms (webauthn unlock + registration)
+// that clear stale challenge state so derived keys don't linger forever.
 chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name !== AUTO_LOCK_ALARM) return;
-  await clear_session_key();
-  try {
-    chrome.runtime.sendMessage({ type: 'aegis:locked' }).catch(() => {});
-  } catch (_) {}
+  if (alarm.name === AUTO_LOCK_ALARM) {
+    await clear_session_key();
+    try {
+      chrome.runtime.sendMessage({ type: 'aegis:locked' }).catch(() => {});
+    } catch (_) {}
+  } else if (alarm.name === 'aegis_challenge_expiry') {
+    // webauthn unlock challenge expired — clear the pending unlock state
+    // so the derived key doesn't sit in memory forever.
+    pending_unlock = null;
+  } else if (alarm.name === 'aegis_reg_challenge_expiry') {
+    // webauthn registration challenge expired — same cleanup.
+    pending_unlock_credential = null;
+  }
 });
 
 // --- message-based session lifecycle ---
@@ -125,12 +135,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (user.webauthn?.credential_id && user.webauthn?.public_key_cbor) {
             const challenge = generate_challenge();
             pending_unlock.challenge = challenge;
-            // expire the challenge after 2 minutes
-            setTimeout(() => {
-              if (pending_unlock?.challenge === challenge) {
-                pending_unlock = null;
-              }
-            }, 120000);
+            // expire the challenge after 2 minutes using chrome.alarms
+            // (not setTimeout) — the service worker can be suspended by
+            // chrome between events, and a setTimeout timer would be
+            // killed along with it, leaving the challenge and its derived
+            // key stuck in memory indefinitely.
+            chrome.alarms.create('aegis_challenge_expiry', { delayInMinutes: 2 });
             sendResponse({
               ok: true,
               needs_webauthn: true,
@@ -244,11 +254,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
           const challenge = generate_challenge();
           pending_unlock_credential.challenge = challenge;
-          setTimeout(() => {
-            if (pending_unlock_credential?.challenge === challenge) {
-              pending_unlock_credential = null;
-            }
-          }, 120000);
+          // same alarm-based expiry as the unlock challenge — see comment above.
+          chrome.alarms.create('aegis_reg_challenge_expiry', { delayInMinutes: 2 });
           sendResponse({ ok: true, challenge });
         } catch (error) {
           sendResponse({ ok: false, error: error.message });
