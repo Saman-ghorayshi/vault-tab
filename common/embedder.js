@@ -116,6 +116,10 @@ class LocalTabEmbedder {
     this.loss_history = [];
     this.is_trained = false;
     this.training_progress = 0;
+    // negative sampling: how many negative (non-context) words to score per
+    // training pair. the original word2vec trick that makes per-step cost
+    // O(k) instead of O(vocab_size). default matches what word2vec papers use.
+    this.negative_sample_count = 10;
   }
 
   // initialize weight matrices using xavier initialization
@@ -139,85 +143,137 @@ class LocalTabEmbedder {
     }
   }
 
-  // forward pass: given an input word index, compute hidden layer
-  // (the embedding lookup) and output layer activations (softmax scores)
-  // returns { hidden: Float32Array, output: Float32Array }
-  forward_pass(input_index) {
-    let hidden = new Float32Array(this.embedding_dim);
+  // (re)initialize ONLY weights_output. used when we load a deserialized model
+  // whose weights_output was intentionally not persisted (see serialize()).
+  // a fresh Xavier-initialized output layer is all that's needed to resume
+  // training — the input layer's learned embeddings are what we keep.
+  initialize_output_weights() {
+    const vsize = this.vocab_size;
+    const dim = this.embedding_dim;
+    if (vsize === 0 || dim === 0) {
+      this.weights_output = null;
+      return;
+    }
+    let scale_out = Math.sqrt(1.0 / dim);
+    this.weights_output = new Float32Array(dim * vsize);
+    for (let i = 0; i < this.weights_output.length; i++) {
+      this.weights_output[i] = (Math.random() * 2 - 1) * scale_out;
+    }
+  }
 
-    // lookup the embedding row for the input word
+  // look up the embedding row for a single word index.
+  // this is the input->hidden step shared by the old and new training paths.
+  // kept as its own helper so inference cosine math stays small and clear.
+  lookup_hidden(input_index) {
+    let hidden = new Float32Array(this.embedding_dim);
     let offset = input_index * this.embedding_dim;
     for (let d = 0; d < this.embedding_dim; d++) {
       hidden[d] = this.weights_input[offset + d];
     }
-
-    // compute output scores: output[j] = sum(hidden[d] * W2[d][j])
-    let output = new Float32Array(this.vocab_size);
-    for (let j = 0; j < this.vocab_size; j++) {
-      let sum = 0;
-      for (let d = 0; d < this.embedding_dim; d++) {
-        sum += hidden[d] * this.weights_output[d * this.vocab_size + j];
-      }
-      output[j] = sum;
-    }
-
-    // softmax to get probabilities
-    let max_val = output[0];
-    for (let j = 1; j < this.vocab_size; j++) {
-      if (output[j] > max_val) max_val = output[j];
-    }
-    let sum_exp = 0;
-    for (let j = 0; j < this.vocab_size; j++) {
-      output[j] = Math.exp(output[j] - max_val);
-      sum_exp += output[j];
-    }
-    for (let j = 0; j < this.vocab_size; j++) {
-      output[j] /= sum_exp;
-    }
-
-    return { hidden: hidden, output: output };
+    return hidden;
   }
 
-  // backward pass: compute gradients and update weights using sgd
-  // uses cross-entropy loss: loss = -log(output[target_index])
+  // score the hidden vector against one word's output row.
+  // output layout is [embedding_dim][vocab_size] (flat), so word j's row is
+  // weights_output[d * vocab_size + j]. score = dot(hidden, row_j).
+  score_word(hidden, word_index) {
+    let sum = 0;
+    for (let d = 0; d < this.embedding_dim; d++) {
+      sum += hidden[d] * this.weights_output[d * this.vocab_size + word_index];
+    }
+    return sum;
+  }
+
+  // negative-sampling backward pass.
+  // for one (center, context) training pair:
+  //   - score the true context word; sigmoid(score) -> target 1
+  //   - score `negative_sample_count` randomly picked other words; target 0
+  //   - update only the touched output rows + the center input row
+  // per-step cost is O(negative_sample_count) instead of O(vocab_size).
+  // loss = sum_of( -log(sigmoid(positive)) , -log(sigmoid(-negative)) ).
   backward_pass(input_index, target_index, learning_rate) {
-    let { hidden, output } = this.forward_pass(input_index);
+    const k = this.negative_sample_count;
+    const vsize = this.vocab_size;
 
-    // gradient of loss w.r.t. output: (output - target)
-    // for one-hot target, this is just output[j] - 1 if j == target else output[j]
-    let grad_output = new Float32Array(this.vocab_size);
-    for (let j = 0; j < this.vocab_size; j++) {
-      grad_output[j] = output[j];
+    let hidden = this.lookup_hidden(input_index);
+
+    // sample k negative words uniformly at random, excluding the true
+    // context word. dedupe so the same word isn't double-counted as both
+    // positive and negative in one step. uniform (not freq^0.75 weighted)
+    // sampling is an acceptable simplification per the plan.
+    const negatives = [];
+    const seen = new Set([target_index]);
+    let attempts = 0;
+    while (negatives.length < k && attempts < k * 4) {
+      attempts++;
+      const cand = Math.floor(Math.random() * vsize);
+      if (!seen.has(cand)) {
+        seen.add(cand);
+        negatives.push(cand);
+      }
     }
-    grad_output[target_index] -= 1;
+    // edge case: vocab tiny enough that we couldn't find k distinct negatives.
+    // just use what we have — a tiny vocab means training is already trivial.
 
-    // gradient of loss w.r.t. hidden layer
-    // grad_hidden[d] = sum_j(grad_output[j] * W2[d][j])
+    // words to score this step: positive first, then negatives.
+    const allIndices = [target_index, ...negatives];
+    const nwords = allIndices.length;
+
+    let total_loss = 0;
+    // per-touched-word output gradients. we only touch the words in
+    // allIndices, so this buffer is tiny (k+1) not vocab_size.
+    const grad_output_for_word = new Float32Array(nwords);
+
+    // step 1: forward + loss + grad for each touched word
+    for (let wi = 0; wi < nwords; wi++) {
+      const widx = allIndices[wi];
+      const score = this.score_word(hidden, widx);
+      // numerically-stable sigmoid
+      const sig = 1.0 / (1.0 + Math.exp(-score));
+      const target = wi === 0 ? 1 : 0;
+      // cross-entropy for a single sigmoid output:
+      //   pos  loss = -log(sig)
+      //   neg  loss = -log(1 - sig) = -log(sigmoid(-score))
+      // both collapse to: -log(sig) if pos, -log(1-sig) if neg
+      const p = Math.max(sig, 1e-7);
+      const q = Math.max(1.0 - sig, 1e-7);
+      total_loss += wi === 0 ? -Math.log(p) : -Math.log(q);
+      grad_output_for_word[wi] = sig - target;
+    }
+
+    // step 2: grad w.r.t. hidden = sum over touched words of
+    //   grad_output_for_word[wi] * weights_output[:, allIndices[wi]]
+    // we ONLY accumulate from the touched words, not all words (that's the
+    // whole point of negative sampling).
     let grad_hidden = new Float32Array(this.embedding_dim);
-    for (let d = 0; d < this.embedding_dim; d++) {
-      let sum = 0;
-      for (let j = 0; j < this.vocab_size; j++) {
-        sum += grad_output[j] * this.weights_output[d * this.vocab_size + j];
-      }
-      grad_hidden[d] = sum;
-    }
-
-    // update W2: W2[d][j] -= lr * grad_output[j] * hidden[d]
-    for (let d = 0; d < this.embedding_dim; d++) {
-      let h = hidden[d];
-      for (let j = 0; j < this.vocab_size; j++) {
-        this.weights_output[d * this.vocab_size + j] -= learning_rate * grad_output[j] * h;
+    for (let wi = 0; wi < nwords; wi++) {
+      const widx = allIndices[wi];
+      const g = grad_output_for_word[wi];
+      for (let d = 0; d < this.embedding_dim; d++) {
+        grad_hidden[d] += g * this.weights_output[d * vsize + widx];
       }
     }
 
-    // update W1: W1[input][d] -= lr * grad_hidden[d]
+    // step 3: update weights_output rows for ONLY the touched words.
+    // W2[d][widx] -= lr * grad_output_for_word[wi] * hidden[d]
+    for (let wi = 0; wi < nwords; wi++) {
+      const widx = allIndices[wi];
+      const g = grad_output_for_word[wi];
+      for (let d = 0; d < this.embedding_dim; d++) {
+        this.weights_output[d * vsize + widx] -= learning_rate * g * hidden[d];
+      }
+    }
+
+    // step 4: update weights_input row for the center word only.
+    // W1[input_index][d] -= lr * grad_hidden[d]
     let offset = input_index * this.embedding_dim;
     for (let d = 0; d < this.embedding_dim; d++) {
       this.weights_input[offset + d] -= learning_rate * grad_hidden[d];
     }
 
-    // return the loss for monitoring
-    return -Math.log(output[target_index] + 1e-10);
+    // return the loss for monitoring — divide by nwords for a per-word
+    // average so the curve shape is comparable to the old per-pair cross-entropy.
+    return total_loss / nwords;
   }
 
   // build vocabulary and training pairs from decrypted tab groups
@@ -273,9 +329,20 @@ class LocalTabEmbedder {
       return;
     }
 
-    // initialize weights if not done yet
+    // initialize weights if not done yet.
+    // two cases after a deserialize():
+    //   - weights_input may be empty (no prior training) -> fully init both.
+    //   - weights_input is loaded but weights_output was intentionally
+    //     dropped on persist -> only re-init the output layer (Xavier).
     if (!this.weights_input || this.weights_input.length === 0) {
+      if (this.vocab_size === 0 || this.embedding_dim === 0) {
+        this.is_trained = false;
+        if (on_complete) on_complete();
+        return;
+      }
       this.initialize_weights(this.vocab_size, this.embedding_dim);
+    } else if (!this.weights_output || this.weights_output.length === 0) {
+      this.initialize_output_weights();
     }
 
     this.loss_history = [];
@@ -448,28 +515,77 @@ class LocalTabEmbedder {
     return best_word.charAt(0).toUpperCase() + best_word.slice(1);
   }
 
-  // serialize the model to a compact json object for storage
+  // serialize the model to a compact json object for storage.
+  // weights_input is quantized to int8 + one scale factor so the persisted
+  // payload is much smaller than full-precision floats — inference quality
+  // stays the same since extract_embedding/suggest_group_name only read
+  // weights_input and round-trip within one scale step.
+  // weights_output is intentionally NOT persisted: it's only used to resume
+  // training, and deserialize() + train_epochs re-Xavier-initialize a fresh
+  // one sized to the loaded vocab/dim. keeping it out of storage avoids a
+  // second precision question that doesn't matter at inference time.
   serialize() {
+    const wi = this.weights_input || new Float32Array(0);
+    // scale = max(abs(all values)) / 127. guard against all-zero weights.
+    let max_abs = 0;
+    for (let i = 0; i < wi.length; i++) {
+      const a = Math.abs(wi[i]);
+      if (a > max_abs) max_abs = a;
+    }
+    const scale = max_abs > 0 ? max_abs / 127.0 : 1.0;
+    const quantized = new Int8Array(wi.length);
+    for (let i = 0; i < wi.length; i++) {
+      // round to nearest, clamp to int8 range to be safe against fp drift
+      let q = Math.round(wi[i] / scale);
+      if (q > 127) q = 127;
+      else if (q < -127) q = -127;
+      quantized[i] = q;
+    }
     return {
       vocab: Array.from(this.vocab.entries()),
       reverse_vocab: this.reverse_vocab,
       vocab_size: this.vocab_size,
       embedding_dim: this.embedding_dim,
-      weights_input: Array.from(this.weights_input || []),
-      weights_output: Array.from(this.weights_output || []),
+      // int8-quantized weights. stored as a plain array (JSON has no Int8Array)
+      // but values are guaranteed integers in [-127, 127].
+      weights_input: {
+        data: Array.from(quantized),
+        scale: scale,
+      },
+      // intentionally omitted: weights_output
       loss_history: this.loss_history,
       is_trained: this.is_trained
     };
   }
 
-  // restore the model from a serialized json object
+  // restore the model from a serialized json object.
+  // tolerates both the new quantized shape ({data, scale}) and the legacy
+  // shape (plain number[]) so any model saved before this change still loads.
+  // weights_output is left null — train_epochs reinitializes it on demand.
   deserialize(data) {
     this.vocab = new Map(data.vocab);
     this.reverse_vocab = data.reverse_vocab || [];
     this.vocab_size = data.vocab_size || 0;
     this.embedding_dim = data.embedding_dim || 64;
-    this.weights_input = new Float32Array(data.weights_input || []);
-    this.weights_output = new Float32Array(data.weights_output || []);
+
+    if (data.weights_input && typeof data.weights_input === 'object' &&
+        !Array.isArray(data.weights_input) && 'data' in data.weights_input) {
+      // new quantized format: dequantize back to Float32Array.
+      const q = data.weights_input.data;
+      const scale = data.weights_input.scale;
+      const reconstructed = new Float32Array(q.length);
+      for (let i = 0; i < q.length; i++) {
+        reconstructed[i] = q[i] * scale;
+      }
+      this.weights_input = reconstructed;
+    } else {
+      // legacy format: plain array of full-precision floats.
+      this.weights_input = new Float32Array(data.weights_input || []);
+    }
+
+    // intentionally not restored — gets Xavier-initialized by train_epochs
+    // the next time the user hits "Retrain / Train Model" on a loaded model.
+    this.weights_output = null;
     this.loss_history = data.loss_history || [];
     this.is_trained = data.is_trained || false;
   }
