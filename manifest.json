@@ -1,19 +1,20 @@
 {
   "manifest_version": 3,
   "name": "Aegis Tab",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Securely save and manage your browser tabs with zero-knowledge AES-256 encryption.",
   "permissions": [
     "storage",
     "unlimitedStorage",
     "tabs",
     "activeTab",
-    "contextMenus"
+    "contextMenus",
+    "alarms"
   ],
-  "host_permissions": [
-    "http://*/*",
-    "https://*/*"
-  ],
+  "host_permissions": [],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self'"
+  },
   "background": {
     "service_worker": "background.js",
     "type": "module"

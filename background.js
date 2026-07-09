@@ -25,16 +25,19 @@ const VERIFIER_STRING = 'aegis-verification-string';
 // successful completion, or challenge timeout.
 let pending_unlock = null;
 let pending_unlock_credential = null;
-let lock_timer = null;
 let auto_lock_minutes = 0;
 
+const AUTO_LOCK_ALARM = 'aegis_auto_lock';
+
 // start the countdown. called after every unlock or after settings change.
+// uses chrome.alarms (not setTimeout) because the service worker gets
+// suspended by chrome after ~30s of inactivity — a setTimeout would die
+// with it and the vault would never auto-lock. alarms survive suspension.
 async function start_auto_lock_timer() {
-  // cancel any existing timer
-  if (lock_timer) {
-    clearTimeout(lock_timer);
-    lock_timer = null;
-  }
+  // cancel any existing alarm
+  try {
+    await chrome.alarms.clear(AUTO_LOCK_ALARM);
+  } catch (_) {}
 
   try {
     const stored = await get_settings();
@@ -44,24 +47,29 @@ async function start_auto_lock_timer() {
   }
 
   if (auto_lock_minutes > 0) {
-    lock_timer = setTimeout(async () => {
-      // auto-lock: clear session and notify all open pages
-      await clear_session_key();
-      try {
-        chrome.runtime.sendMessage({ type: 'aegis:locked' }).catch(() => {});
-      } catch (_) {}
-      lock_timer = null;
-    }, auto_lock_minutes * 60 * 1000);
+    // delayInMinutes is the minimum for chrome.alarms (chrome rounds
+    // up to the next minute in some builds, but that's fine for an
+    // auto-lock that's measured in minutes anyway).
+    chrome.alarms.create(AUTO_LOCK_ALARM, { delayInMinutes: auto_lock_minutes });
   }
 }
 
-// cancel the auto-lock timer (on explicit lock)
-function cancel_auto_lock_timer() {
-  if (lock_timer) {
-    clearTimeout(lock_timer);
-    lock_timer = null;
-  }
+// cancel the auto-lock alarm (on explicit lock)
+async function cancel_auto_lock_timer() {
+  try {
+    await chrome.alarms.clear(AUTO_LOCK_ALARM);
+  } catch (_) {}
 }
+
+// fire the auto-lock when the alarm fires — this works even if the
+// service worker was suspended and chrome woke it up just for this.
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name !== AUTO_LOCK_ALARM) return;
+  await clear_session_key();
+  try {
+    chrome.runtime.sendMessage({ type: 'aegis:locked' }).catch(() => {});
+  } catch (_) {}
+});
 
 // --- message-based session lifecycle ---
 // popup and manager pages send these messages instead of writing the
@@ -193,7 +201,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       case 'aegis:lock': {
-        cancel_auto_lock_timer();
+        await cancel_auto_lock_timer();
         await clear_session_key();
         chrome.runtime.sendMessage({ type: 'aegis:locked' }).catch(() => {});
         sendResponse({ ok: true });
