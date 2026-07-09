@@ -392,7 +392,11 @@ chrome.commands.onCommand.addListener(async (command) => {
     const session_user = await get_session_user();
 
     if (!session_key || !session_user) {
-      chrome.action.openPopup?.();
+      try {
+        await chrome.action.openPopup();
+      } catch (_) {
+        await chrome.tabs.create({ url: chrome.runtime.getURL('manager_page/manager.html') });
+      }
       return;
     }
 
