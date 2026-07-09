@@ -608,11 +608,38 @@ document.addEventListener('DOMContentLoaded', async () => {
   const passkey_btn = document.getElementById('manager-register-passkey');
   if (passkey_btn) {
     passkey_btn.addEventListener('click', async () => {
-      try {
-        passkey_btn.disabled = true;
-        passkey_btn.textContent = 'Registering...';
+          try {
+            passkey_btn.disabled = true;
+            passkey_btn.textContent = 'Registering...';
 
-        // 1. ask the service worker for a challenge
+            // 0. re-verify the current password before allowing a passkey
+            //    registration — consistent with delete-account and
+            //    change-password, both of which require re-auth first.
+            const session_user = await get_session_user();
+            if (!session_user) throw new Error('Not logged in');
+            const user = await get_user_by_username(session_user);
+            if (!user) throw new Error('Account not found');
+            // prompt for password (inline in the settings area — we add a
+            // small input that appears on click, same pattern as the
+            // delete-account confirm modal but lighter)
+            const pw = await prompt_for_password(
+              'Enter current password to register a passkey'
+            );
+            if (!pw) {
+              // user cancelled; silently reset
+              passkey_btn.disabled = false;
+              passkey_btn.textContent = 'Register Passkey';
+              return;
+            }
+            const salt = base64_to_array_buffer(user.password_salt);
+            const iterations = user.password_iterations || OLD_ITERATIONS;
+            const key = await derive_key_from_password(pw, salt, iterations);
+            const decrypted = await decrypt(user.password_verifier, key);
+            if (decrypted !== VERIFIER_STRING) {
+              throw new Error('Wrong password');
+            }
+
+            // 1. ask the service worker for a challenge
         const start_response = await chrome.runtime.sendMessage({
           type: 'aegis:register-webauthn-start'
         });
@@ -1734,14 +1761,80 @@ async function handle_delete_confirm() {
 
     show_toast('Account deleted.', 'info');
   } catch (error) {
-    error_el.textContent = error.message === 'Wrong password'
-      ? 'Incorrect password'
-      : `Delete failed: ${error.message}`;
-    error_el.classList.remove('hidden');
-    confirm_btn.disabled = false;
-    confirm_btn.textContent = 'Delete Forever';
+      error_el.textContent = error.message === 'Wrong password'
+        ? 'Incorrect password'
+        : `Delete failed: ${error.message}`;
+      error_el.classList.remove('hidden');
+      confirm_btn.disabled = false;
+      confirm_btn.textContent = 'Delete Forever';
+    }
   }
-}
+
+  // lightweight password prompt — shows a small inline modal, returns the
+  // password string or null if the user cancels. re-used by passkey registration
+  // and any future setting that needs re-auth without a full modal.
+  function prompt_for_password(message = 'Enter your password') {
+    return new Promise((resolve) => {
+      const existing = document.getElementById('light-pw-prompt');
+      if (existing) existing.remove();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'light-pw-prompt';
+      overlay.className = 'modal-overlay';
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) { overlay.remove(); resolve(null); }
+      });
+
+      const box = document.createElement('div');
+      box.className = 'modal-box';
+      box.style.maxWidth = '360px';
+
+      const title_el = document.createElement('p');
+      title_el.textContent = message;
+      title_el.style.marginBottom = '12px';
+
+      const input = document.createElement('input');
+      input.type = 'password';
+      input.className = 'manager-input';
+      input.style.width = '100%';
+      input.style.boxSizing = 'border-box';
+      input.placeholder = 'Password';
+      setTimeout(() => input.focus(), 50);
+
+      const buttons = document.createElement('div');
+      buttons.style.display = 'flex';
+      buttons.style.gap = '8px';
+      buttons.style.marginTop = '12px';
+
+      const cancel = document.createElement('button');
+      cancel.className = 'manager-button secondary';
+      cancel.textContent = 'Cancel';
+      cancel.addEventListener('click', () => { overlay.remove(); resolve(null); });
+
+      const ok = document.createElement('button');
+      ok.className = 'manager-button';
+      ok.textContent = 'Confirm';
+      ok.addEventListener('click', () => {
+        const val = input.value;
+        overlay.remove();
+        resolve(val || null);
+      });
+
+      // Enter key submits, Escape cancels
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { overlay.remove(); resolve(input.value || null); }
+        if (e.key === 'Escape') { overlay.remove(); resolve(null); }
+      });
+
+      buttons.appendChild(cancel);
+      buttons.appendChild(ok);
+      box.appendChild(title_el);
+      box.appendChild(input);
+      box.appendChild(buttons);
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+    });
+  }
 
 // show the change-password modal. clears all fields and focuses the first one.
 function show_change_password_modal() {
