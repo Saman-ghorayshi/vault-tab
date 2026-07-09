@@ -1,0 +1,45 @@
+# runs the project's test suite on every push and pull request.
+# no build step — this is a vanilla-JS chrome extension. node --test is enough.
+
+name: tests
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # test against a couple of node versions. the test files use
+        # node:test + globalThis.crypto (webcrypto), which needs node >= 18.
+        node-version: [18, 20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Syntax-check all JS source files
+        run: |
+          for f in background.js common/*.js popup/popup.js manager_page/manager.js; do
+            node --check "$f" || { echo "SYNTAX ERROR in $f"; exit 1; }
+          done
+
+      - name: Run crypto.js tests
+        run: node --test test_crypto.mjs
+
+      - name: Run embedder.js tests
+        run: node --test test_embedder.mjs
+
+      - name: Run Phase 5 negative-sampling + quantization tests
+        run: node --test test_phase5.mjs
+
+      - name: Run WebAuthn COSE parsing regression test
+        run: node test_cose_parse.mjs
