@@ -1979,26 +1979,28 @@ async function handle_change_password() {
 // downloaded), every call returns null/false and the summarize button just
 // doesn't appear. the extension is fully functional without this feature.
 
-// feature-detection: returns true if the Prompt API is available and ready.
-// caches the result so we don't check on every group render.
+// feature-detection: returns a Promise that resolves to true if the Prompt
+// API is available and ready. caches the result so we don't check on every
+// group render — after the first call, subsequent calls return a resolved
+// promise immediately.
 let _prompt_api_cache = null;
 function prompt_api_available() {
-  if (_prompt_api_cache !== null) return _prompt_api_cache;
+  if (_prompt_api_cache !== null) return Promise.resolve(_prompt_api_cache);
   // LanguageModel is the current API surface (replaced the earlier AIAssistant).
   // availability() returns one of: 'readily', 'available', 'downloadable', 'unavailable'.
-  // we only offer the button if the model is ready right now ('readily').
+  // we only offer the button if the model is ready right now ('readily' or 'available').
   if (typeof LanguageModel === 'undefined') {
     _prompt_api_cache = false;
-    return false;
+    return Promise.resolve(false);
   }
-  // async check — returns a promise. callers that need sync use the cached value.
-  LanguageModel.availability().then(status => {
+  // async check — LanguageModel.availability() returns a promise.
+  return LanguageModel.availability().then(status => {
     _prompt_api_cache = (status === 'readily' || status === 'available');
-  }).catch(() => { _prompt_api_cache = false; });
-  // optimistic: return false until the async check resolves, then subsequent
-  // calls will use the cached value. the button starts disabled and gets
-  // enabled when the async check confirms availability.
-  return _prompt_api_cache;
+    return _prompt_api_cache;
+  }).catch(() => {
+    _prompt_api_cache = false;
+    return false;
+  });
 }
 
 // generate a one-line summary of a tab group using the on-device model.
@@ -2243,39 +2245,40 @@ function create_group_element(group_id, group_data, group_index = 0) {
     summary_el.className = 'group-ai-summary';
     summary_el.textContent = group_data.ai_summary;
     header.parentNode.insertBefore(summary_el, tabs_list);
-  } else if (prompt_api_available()) {
-    const summarize_btn = document.createElement('button');
-    summarize_btn.className = 'summarize-button secondary-button';
-    summarize_btn.textContent = 'Summarize';
-    summarize_btn.disabled = true;
-    summarize_btn.title = 'Generate a one-line AI summary of this group (on-device)';
-    actions_div.appendChild(summarize_btn);
-    // enable after feature-detection completes asynchronously
+  } else {
+    // check if the on-device Prompt API is available. if it is, show a
+    // "Summarize" button. if not, show nothing — the extension works
+    // fully without this feature.
     prompt_api_available().then(available => {
-      if (available) summarize_btn.disabled = false;
-    });
-    summarize_btn.addEventListener('click', async () => {
-      summarize_btn.disabled = true;
-      summarize_btn.textContent = 'Summarizing...';
-      try {
-        const summary = await generate_ai_summary(group_data);
-        if (summary) {
-          await persist_ai_summary(group_id, summary, group_data);
-          // replace the button with the summary text
-          const summary_el = document.createElement('p');
-          summary_el.className = 'group-ai-summary';
-          summary_el.textContent = summary;
-          summarize_btn.replaceWith(summary_el);
-        } else {
-          // model couldn't produce a summary — just remove the button
-          summarize_btn.remove();
+      if (!available) return;
+      const summarize_btn = document.createElement('button');
+      summarize_btn.className = 'summarize-button secondary-button';
+      summarize_btn.textContent = 'Summarize';
+      summarize_btn.title = 'Generate a one-line AI summary of this group (on-device)';
+      actions_div.appendChild(summarize_btn);
+      summarize_btn.addEventListener('click', async () => {
+        summarize_btn.disabled = true;
+        summarize_btn.textContent = 'Summarizing...';
+        try {
+          const summary = await generate_ai_summary(group_data);
+          if (summary) {
+            await persist_ai_summary(group_id, summary, group_data);
+            // replace the button with the summary text
+            const summary_el = document.createElement('p');
+            summary_el.className = 'group-ai-summary';
+            summary_el.textContent = summary;
+            summarize_btn.replaceWith(summary_el);
+          } else {
+            // model couldn't produce a summary — just remove the button
+            summarize_btn.remove();
+          }
+        } catch (error) {
+          console.error('Aegis Tab: AI summary failed:', error);
+          summarize_btn.textContent = 'Summarize';
+          summarize_btn.disabled = false;
+          show_toast('AI summary unavailable.', 'error');
         }
-      } catch (error) {
-        console.error('Aegis Tab: AI summary failed:', error);
-        summarize_btn.textContent = 'Summarize';
-        summarize_btn.disabled = false;
-        show_toast('AI summary unavailable.', 'error');
-      }
+      });
     });
   }
 
