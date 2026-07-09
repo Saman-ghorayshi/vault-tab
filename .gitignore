@@ -19,3 +19,6 @@ build/
 *.zip
 *.crx
 *.pem
+
+# leftover backup folders from early development
+**/New folder/
