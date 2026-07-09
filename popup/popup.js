@@ -253,38 +253,65 @@ document.addEventListener('DOMContentLoaded', async () => {
     unlock_password.addEventListener('keydown', (e) => { if (e.key === 'Enter') unlock_button.click(); });
 
     unlock_button.addEventListener('click', async () => {
-      const username = all_users.length === 1
-        ? all_users[0].username
-        : unlock_username_select.value;
-      const password = unlock_password.value;
-      unlock_error.classList.add('hidden');
-      if (!password) {
-        unlock_error.textContent = 'Please enter your password';
-        unlock_error.classList.remove('hidden');
-        return;
-      }
+          const username = all_users.length === 1
+            ? all_users[0].username
+            : unlock_username_select.value;
+          const password = unlock_password.value;
+          unlock_error.classList.add('hidden');
+          if (!password) {
+            unlock_error.textContent = 'Please enter your password';
+            unlock_error.classList.remove('hidden');
+            return;
+          }
 
-      unlock_button.disabled = true;
-      unlock_button.textContent = 'Unlocking...';
+          unlock_button.disabled = true;
+          unlock_button.textContent = 'Unlocking...';
 
-      try {
-        const response = await chrome.runtime.sendMessage({
-          type: 'aegis:unlock', username, password
+          try {
+            // phase 1: password verification
+            const response = await chrome.runtime.sendMessage({
+              type: 'aegis:unlock', username, password
+            });
+
+            if (response?.needs_webauthn) {
+              // server-side challenge needed for passkey assertion
+              const { webauthn_credential_id, challenge } = response;
+              const webauthn_module = await import(
+                chrome.runtime.getURL('common/webauthn.js')
+              );
+              const options = webauthn_module.make_assertion_options(
+                challenge, webauthn_credential_id
+              );
+              unlock_button.textContent = 'Verify with passkey...';
+
+              // trigger the browser's native passkey dialog
+              const credential = await navigator.credentials.get({ publicKey: options });
+              if (!credential) throw new Error('Passkey cancelled');
+
+              const serialized = webauthn_module.serialize_assertion(credential);
+              const verify_response = await chrome.runtime.sendMessage({
+                type: 'aegis:unlock-webauthn',
+                assertion: serialized
+              });
+              if (!verify_response?.ok) throw new Error('Passkey verification failed');
+            } else if (response?.ok) {
+              // no passkey needed — unlocked directly
+            } else {
+              throw new Error(response?.error || 'Unlock failed');
+            }
+
+            locked_view.classList.add('hidden');
+            unlocked_view.classList.remove('hidden');
+            if (current_user_label) current_user_label.textContent = username;
+          } catch (error) {
+            unlock_error.textContent = error.message === 'Passkey cancelled'
+              ? 'WebAuthn cancelled'
+              : 'Invalid username or password';
+            unlock_error.classList.remove('hidden');
+            unlock_button.disabled = false;
+            unlock_button.textContent = 'Unlock';
+          }
         });
-        if (response?.ok) {
-          locked_view.classList.add('hidden');
-          unlocked_view.classList.remove('hidden');
-          if (current_user_label) current_user_label.textContent = username;
-        } else {
-          throw new Error(response?.error || 'Unlock failed');
-        }
-      } catch (error) {
-        unlock_error.textContent = 'Invalid username or password';
-        unlock_error.classList.remove('hidden');
-        unlock_button.disabled = false;
-        unlock_button.textContent = 'Unlock';
-      }
-    });
   }
 
   // AI semantic auto-naming: use the trained embedder to suggest a group name

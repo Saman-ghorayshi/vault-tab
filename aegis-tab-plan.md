@@ -1,0 +1,336 @@
+# Aegis Tab — Implementation Directive
+
+**Read this entire document before writing or changing a single line of code.**
+
+You are working on an existing Chrome extension (Manifest V3, vanilla JavaScript, no framework, no build step) called **Aegis Tab** — an encrypted, multi-user tab manager with a from-scratch, in-browser-trained neural network for semantic tab search. This document was produced by a security/code review of the existing codebase and lists, in order, every bug to fix and every new feature to build.
+
+## Before you start
+
+- This document assumes a project layout roughly like: a popup folder (login/quick-actions popup: `popup.html`, `popup.js`, `popup.css`), a `manager_page/` folder (`manager.html`, `manager.js`, `manager.css` — the main tab library UI), and a `common/` folder (`storage.js`, `crypto.js`, `urls.js`, `idb_storage.js`, `embedder.js` — shared modules imported by both popup and manager). **Verify the real folder and file names in the actual repository before writing any import path.** If names differ from what's used here, adapt — don't create duplicate files.
+- `manifest.json` and a background/service-worker file were **not** part of the review this document is based on. They may already exist in the repo, or may not exist at all — check first. Phase 3 and Phase 7 both touch the manifest; treat any manifest snippets below as intent, not copy-paste-exact syntax, and verify against the real file.
+- All existing code uses **snake_case** for function and variable names (`get_all_users`, `derive_key_from_password`, `check_auto_lock`), not camelCase. All new code you write must match this convention exactly, for every phase, no exceptions.
+- This is a deliberately zero-dependency project (the hand-rolled neural network in `embedder.js` is a design choice, not something to "fix" by swapping in a library). Do not add npm packages, CDN scripts, or frameworks unless a phase below explicitly says to.
+- Never write a raw password to `console.log`, a comment, or any persisted storage, even temporarily while debugging. Remove all debug logging before considering any phase finished.
+- Work through the phases **in the order given below**. Later phases assume earlier phases are already done and working. Do not skip ahead, and do not start a phase until the previous one's "Verify" / acceptance checklist passes.
+- After each phase, if you have git access, commit with a clear message describing that phase (e.g. `fix: scope and encrypt the trained model per-user (bug 1.1)`). This gives you (and the human) a clean rollback point if a later phase goes wrong.
+- Do not refactor, rename, or "clean up" code that isn't part of the current phase's task list, even if you notice something else you'd do differently. Stay inside the scope of each phase.
+- Each code change that you make dont forget to git add and git clone it with a simple commit message from a student type not flashy  ones
+## Order of operations
+
+1. **Phase 1** — Bug fixes (do this first; everything else builds on a correct foundation)
+2. **Phase 2** — Multi-user account lifecycle (add / remove / change password)
+3. **Phase 3** — Service worker + centralized session lifecycle
+4. **Phase 4** — WebAuthn as a second unlock factor
+5. **Phase 5** — Embedder upgrade: negative sampling + weight quantization
+6. **Phase 6** — On-device AI (Chrome's built-in Prompt API) as a complementary feature
+7. **Phase 7** — Portfolio trust signals: threat model doc, tests, CI, manifest/CSP audit
+
+---
+
+# Phase 1 — Bug fixes
+
+Fix these in order. Each entry gives you the file(s), what's wrong, exactly what to change, and how to verify it before moving to the next bug.
+
+### 1.1 — The trained model leaks across accounts AND is stored unencrypted
+
+**Files:** `common/storage.js`, `manager_page/manager.js`, `popup/popup.js` (path names per your real repo)
+
+**Problem (two bugs, one root cause):**
+- `save_model()` / `load_model()` / `clear_model()` in `storage.js` read and write a single global storage key (the `model` entry in `STORAGE_KEYS`) that is **not** scoped to a username, unlike tab groups, which correctly use a per-user key. Whoever unlocks the extension next loads whatever model was last trained — even if it belongs to a different account.
+- Separately, the serialized model is passed straight to `chrome.storage.local.set()` / `idb_put_chunked()` with **no encryption step at all**. Every other piece of user content (tab titles, URLs) goes through `encrypt()`/`decrypt()` with AES-256-GCM before being persisted. The model does not, even though its vocabulary is derived directly from that same tab/URL data. Anyone with local read access to the extension's storage (another extension with broad storage permissions, or offline access to the browser profile's files) can read a user's tab vocabulary without ever knowing their password.
+
+**Fix:**
+- Change the signatures to `save_model(username, model_data)`, `load_model(username)`, `clear_model(username)`. Build the storage key from the username, e.g. `` `aegis_model_${username}` ``, mirroring the existing `` `tabgroups_${username}` `` pattern used for IndexedDB. Update the IndexedDB fallback key the same way.
+- Update every call site to pass the current user: `manager.js`'s `load_saved_model()`, the `save_model(embedder.serialize())` call inside `start_neural_training()`, and `popup.js`'s `load_model()` call inside the "AI semantic auto-naming" try block (use `session_user` / `active_username` there, whichever the file already has in scope).
+- Encrypt the serialized model before storing it and decrypt it after loading, using the same session key already used for tab groups: `encrypt(JSON.stringify(embedder.serialize()), session_key)` before saving, `JSON.parse(await decrypt(stored_value, session_key))` after loading. This means `save_model`/`load_model` now need the session key passed in as well as the username.
+- **Migration for the old global key:** on first load after this fix, if the old unscoped global model key still exists in storage, just delete it outright. Do not try to guess which account it belonged to and do not migrate it to any specific user — a missing model just means "not trained yet," which is a safe, cheap-to-recover-from state (retraining takes seconds via the existing Train Model button). Silently assigning a stale, possibly-wrong model to some account is worse than making everyone retrain.
+- In `delete_user()`, when cleaning up a removed account, make sure it clears *that user's own* model key, not the (now-removed) global one.
+
+**Verify:** Create two accounts. Train the model on account A. Log out, log into account B. Account B's analytics panel must show "Not trained" / vocab size 0 — not account A's numbers. Confirm the raw value in `chrome.storage.local` for a trained model is ciphertext (an `iv`/`ciphertext` shape), not readable JSON.
+
+### 1.2 — PBKDF2 iteration count is under current guidance, and needs a real migration path
+
+**File:** `common/crypto.js`, plus the user object shape wherever it's defined/used (`storage.js`, `popup.js`, `manager.js`)
+
+**Problem:** `derive_key_from_password` hardcodes 310,000 PBKDF2 iterations. Current OWASP guidance for PBKDF2-HMAC-SHA256 is 600,000+. Just bumping the constant will silently break every existing account, because their stored verifier and every tab group were encrypted with a key derived at the old iteration count — after the change, deriving a key at the new count from the correct password will not match, and it will look exactly like a wrong password.
+
+**Fix:**
+- Add a `password_iterations` field to the user object (alongside `password_salt` and `password_verifier`). Change `derive_key_from_password(password, salt)` to `derive_key_from_password(password, salt, iterations)` — no more hardcoded constant inside the function.
+- For any existing user record loaded that doesn't have `password_iterations` set, treat it as `310000` (the old default) rather than crashing or defaulting to the new value.
+- New accounts created through setup should be assigned `600000` from the start.
+- **Silent upgrade on unlock:** after a successful unlock using a user's stored (possibly old) `password_iterations` value, if that value is below `600000`, immediately and transparently re-derive a new key at `600000` iterations from the same password, re-encrypt the verifier with it, update `password_iterations` to `600000` on the user object, and save. The account owner should never see this happen or be asked to do anything — it just self-upgrades the next time they log in.
+- Do **not** touch tab-group ciphertexts as part of this specific fix — they stay encrypted with the session key exactly as before; only the password→key derivation strength changes. (Re-encrypting tab groups only becomes necessary in Phase 2's change-password flow, which is a different operation.)
+
+**Verify:** An account created before this change can still unlock with its original password (this is the critical regression check — test it explicitly). After one successful unlock, that account's `password_iterations` field reads `600000`. A brand-new account also has `password_iterations` of `600000` immediately after setup.
+
+### 1.3 — The `.aegis` backup file cannot actually be restored on a new machine
+
+**File:** `manager_page/manager.js`, the export/import backup handlers
+
+**Problem:** The code comment above the export handler says the backup is meant to contain "the raw encrypted groups and credentials salt so it can be restored on any machine" — but the exported JSON object only includes the `groups` array (ciphertext). No salt, no verifier. Importing this file into a fresh install (no matching account yet) merges in ciphertext that can never be decrypted, because the key needed to decrypt it depends on a salt that was never exported.
+
+**Fix:**
+- Add `password_salt`, `password_verifier`, and `password_iterations` (from bug 1.2) to the exported backup JSON, alongside the existing `groups` array. These are safe to export in plaintext — a salt and a verifier are not secret on their own; recovering the password from them still requires brute-forcing through PBKDF2.
+- On import: if a user with the exported `exported_by` username does **not** already exist locally, create a new user record directly from the imported salt/verifier/iterations (do not prompt for a new password — the whole point is that the original password still works), then merge in the groups exactly as the import logic already does. If a user with that username *does* already exist locally, keep the current behavior (just merge groups, skip duplicates by id) and ignore the imported credentials, since the local account's credentials are the ones actually in use.
+
+**Verify:** Export a backup from account "alice". On a clean/reset copy of the extension (or after fully deleting the local `alice` account via Phase 2's delete-account feature), import that backup file. You should be prompted to unlock with `alice`'s original password and it should work, with her groups present.
+
+### 1.4 — Storage writes aren't consistently protected against concurrent saves
+
+**File:** `manager_page/manager.js`
+
+**Problem:** `commit_deletion()` already does the right thing — it re-reads `get_tab_groups()` fresh immediately before its final `save_tab_groups()` call, so a save from another open tab (popup, or a second manager tab) landing in between doesn't get silently overwritten. This same pattern is **missing** in three other functions that read the group list once and then write back that same, possibly-stale, array: `persist_tab_reorder()`, `rename_session()`, and the legacy-tab-ID backfill block inside `render_page()`.
+
+**Fix:** In each of those three functions, right before the final `save_tab_groups()` call, re-fetch `groups = await get_tab_groups(active_username)`, re-locate the specific group you're updating by its `id` in that *fresh* array, and write your updated `{id, iv, ciphertext}` envelope into that fresh array before saving. If the group can no longer be found (another context deleted it in the meantime), abort that save quietly — do not re-add/resurrect a group that was deleted elsewhere.
+
+**Verify:** Not easily testable by hand with precise timing, so reason through it instead: after the fix, all four write paths (`commit_deletion`, `persist_tab_reorder`, `rename_session`, the `render_page` backfill) should follow the identical "re-read fresh, re-locate by id, write into the fresh array" shape. Confirm by reading the code, not just running it.
+
+### 1.5 — A group that fails to decrypt just silently disappears
+
+**File:** `manager_page/manager.js`, `render_page()`
+
+**Problem:** When a group's `decrypt()` call rejects, the `.catch(() => null)` turns it into `null`, and `null` results are filtered out with no trace. A corrupted or unreadable group looks exactly like it was never there — indistinguishable from real data loss, from the user's point of view.
+
+**Fix:** Instead of dropping failed decrypts, keep track of them and render a distinct card for each one — something like "This saved group could not be read (possibly corrupted)" along with its raw `id`, a warning color/icon, and a "Delete" button (since there's nothing else useful to do with ciphertext that won't decrypt). Do not attempt to repair or guess its contents.
+
+**Verify:** Manually corrupt one group's stored `ciphertext` value (e.g. flip a character in dev tools), reload the manager page, and confirm you see an explicit "could not be read" card instead of the group just vanishing with the count silently going down.
+
+### 1.6 — Selection state goes stale after a real (non-undone) delete
+
+**File:** `manager_page/manager.js`
+
+**Problem:** `undo_all_deletions()` correctly removes each restored element from `selection_state.selected_tabs`. `commit_deletion()` — the function that actually runs when the user does *not* click undo — never does the equivalent cleanup, and `selection_state.all_tab_elements` is never rebuilt after a commit either (only a drag-reorder rebuilds it). After tabs are genuinely deleted, the floating action panel can keep showing a stale "N selected" count, and J/K keyboard navigation can walk into detached DOM nodes.
+
+**Fix:** In `commit_deletion()`, at every point where `deletion.element.remove()` (or `deletion.element.closest('.group-card')?.remove()`) is called, also: `selection_state.selected_tabs.delete(deletion.element)` and remove the element from `selection_state.all_tab_elements` (filter it out of the array). Then call `update_action_panel()` so the floating panel reflects the new count immediately, matching what `undo_all_deletions()` already does on the undo path.
+
+**Verify:** Select 3 tabs, delete them, let the 8-second undo window expire without clicking undo. The floating action panel should disappear (0 selected), and pressing `J`/`K` afterward should navigate only real, visible tabs.
+
+### 1.7 — Wrong username fails fast, wrong password for a real user is slow (timing side-channel)
+
+**Files:** `popup/popup.js`, `manager_page/manager.js` — both unlock handlers
+
+**Problem:** When `get_user_by_username()` returns `null`, the code throws immediately. When the username exists but the password is wrong, the full ~100ms+ PBKDF2 derivation runs before the failure is detected. The visible error message is already the same either way ("Incorrect password") — good — but the *time* it takes to respond differs, which leaks whether a given username exists.
+
+**Fix:** When the username lookup fails, before throwing, run a dummy `derive_key_from_password()` call (any fixed placeholder password and salt) so a "no such user" attempt takes roughly the same wall-clock time as a real failed attempt, then throw the same error.
+
+**Verify:** Not critical to build an automated test for this — just confirm the dummy derivation call is present on the "user not found" path in both files.
+
+### 1.8 — Deprecated `keypress` event
+
+**Files:** `popup/popup.js`, `manager_page/manager.js`
+
+**Fix:** Every `addEventListener('keypress', ...)` should become `addEventListener('keydown', ...)`. The `if (e.key === 'Enter')` checks inside them stay exactly the same — only the event name changes. `keypress` has been deprecated for years and shouldn't be relied on.
+
+### 1.9 — "Save This Tab" doesn't get AI auto-naming like "Save All Tabs" does
+
+**File:** `popup/popup.js`
+
+**Fix:** Extract the existing "AI semantic auto-naming" try/catch block (the one that loads the model and calls `suggest_group_name`) out of the `save_tabs_button` handler into its own small function, e.g. `async function try_suggest_group_name(tabs_to_save)` returning either a suggested name string or `null`. Call it from both the `save_tabs_button` and `save_current_tab_button` handlers before building `tab_data`.
+
+### 1.10 — (Do this last, and only if everything above is done and verified) Replace native `alert()` / `confirm()` / `prompt()` with in-app UI
+
+**Files:** `popup/popup.js`, `manager_page/manager.js`, plus matching CSS
+
+This is polish, not a functional bug — do not let it eat time that should go to 1.1–1.9 or to the phases below. If you do get to it: the project already has a well-built toast component for the undo-delete flow. Generalize it into a reusable `show_toast(message, type)` helper (types like `error`/`success`/`info`) and use it everywhere `alert()` is currently used for error messages. Replace the `prompt()`-based session rename in `rename_session`'s caller with an inline-editable title (click to turn the `<h3>` into a text input) or a small modal matching the existing paste-URLs modal's markup/CSS pattern. Do not remove or change the underlying `rename_session`/deletion logic — only the input mechanism.
+
+---
+
+# Phase 2 — Multi-user account lifecycle
+
+**Goal:** the storage layer already fully supports multiple isolated accounts (per-user salt, verifier, tab groups). The UI currently only ever exposes account #1. Make account creation, deletion, and password change actually reachable.
+
+### 2.1 — Add-account
+
+- Add an "+ Add Account" control in two places: (a) inside `manager.html`'s settings panel, usable while already unlocked, and (b) on the lock/unlock screen in both `popup.html` and `manager.html`, as a small secondary link like "Create a new account instead."
+- Refactor the existing first-run setup form logic in `popup.js` (username field, password field with strength meter, confirm-password field, the whole validation chain) into a reusable function — e.g. `render_setup_view()` and `handle_setup_submit()` — that both the original first-run path (`all_users.length === 0`) and the new "Add Account" trigger call. Don't duplicate the form logic.
+- Reject usernames that already exist: call `get_user_by_username()` before creating, and show a clear inline error if it returns non-null. (Currently `save_user()` would silently overwrite an existing user with a matching username if this check is skipped — that must not happen.)
+- New accounts get `password_iterations: 600000` from the start (per bug 1.2).
+- After creating a new account from within an already-unlocked session, **do not** automatically switch the active session to it — stay on the current account and just confirm the new one was created. Switching accounts is a separate, deliberate action (lock, then unlock as the new user via the existing username dropdown).
+
+### 2.2 — Remove-account
+
+- Add a "Delete this account" control in `manager.html`'s settings panel, unlocked-only, and it only ever operates on the **currently unlocked** account — never let one unlocked account delete a different account without that account's own password.
+- Require re-entering the current password before deleting: re-derive a key from it and verify against the stored verifier, exactly like unlock does. An unlocked-but-unattended session should not be enough on its own to permanently destroy data.
+- Show the user what they're about to lose before the final confirmation (e.g. "This will permanently delete N saved tab groups and cannot be undone").
+- Call the existing `delete_user()` in `storage.js` (already handles IndexedDB and model cleanup once you've applied the per-user model key change from bug 1.1).
+- After deletion: if no accounts remain, show the first-run setup screen; if other accounts remain, show the unlock screen.
+
+### 2.3 — Change password
+
+- Add a "Change Password" control in `manager.html`'s settings panel, unlocked-only.
+- Require the **current** password as input (re-derive and verify against the stored verifier — do not trust that "session is unlocked" alone proves current knowledge of the password), plus a new password and confirmation, reusing the existing strength meter and minimum-length check from setup.
+- On confirm, in this order:
+  1. Decrypt every existing tab group with the **old** session key. If *any* group fails to decrypt, stop here and abort the whole operation, leaving the account completely untouched — never partially migrate.
+  2. Decrypt the stored model (if one exists) with the old key the same way, for the same reason.
+  3. Generate a new random salt, derive a new key from the new password at `600000` iterations, encrypt a fresh verifier with it.
+  4. Re-encrypt every tab group (and the model, if present) with the new key.
+  5. Only now, write everything: new salt, new verifier, new `password_iterations`, the newly re-encrypted tab groups, and the newly re-encrypted model, saved together.
+  6. Replace the in-memory session key via `store_session_key()` with the new key so the rest of the current session keeps working without forcing a fresh unlock.
+- If step 1 or 2 fails partway through, nothing in step 5 should have been written yet — that ordering is what keeps this safe against a failure mid-operation.
+
+**Verify (all of Phase 2):** create a second account from a fresh single-account state — confirm it wasn't possible before this phase and is now. Log in as each account independently and confirm their tab groups stay fully separate. Delete an account and confirm its data (including its model) is gone and the other account is unaffected. Change a password, then fully lock and re-unlock with the *new* password — confirm the old password no longer works and all previously-saved tab groups are still readable.
+
+---
+
+# Phase 3 — Service worker + centralized session lifecycle
+
+**Goal:** session/auto-lock state currently only lives inside `manager.js`, as a page-scoped `setTimeout`. This means it silently does nothing if the user only ever uses the popup, and doesn't correctly start tracking activity if auto-lock is turned on mid-session (it's only wired up once, at `manager.js`'s initial page load, gated on the setting's value *at that moment*). Fix this properly by giving the extension a persistent background service worker that owns session lifecycle, instead of a page that may or may not be open.
+
+### 3.1 — Create the service worker
+
+- Add a service worker file (e.g. `background.js`) at the extension root if one doesn't already exist. Register it in `manifest.json` via `"background": { "service_worker": "background.js" }`. It needs the `alarms` permission (add to `manifest.json`'s `permissions` array).
+- It can import the same `common/storage.js` module used elsewhere (service workers support ES module imports in Manifest V3 when declared with `"type": "module"` in the manifest's background field — verify the exact current syntax if unsure, rather than guessing).
+
+### 3.2 — Move auto-lock into the service worker using `chrome.alarms`
+
+- When a session is unlocked (right after `store_session_key()` + `set_session_user()` succeed, in both `popup.js` and `manager.js`), send a message to the service worker, e.g. `chrome.runtime.sendMessage({ type: 'session_unlocked', auto_lock_minutes: settings.auto_lock_minutes })`.
+- The service worker listens via `chrome.runtime.onMessage`. On `session_unlocked`, if `auto_lock_minutes > 0`, create an alarm: `chrome.alarms.create('aegis_auto_lock', { delayInMinutes: auto_lock_minutes })`. If `auto_lock_minutes` is `0`, clear any existing alarm instead.
+- Replace `manager.js`'s existing `mousemove`/`keydown`/`click` activity listeners so that, instead of calling a local `reset_auto_lock_timer()` with a local `setTimeout`, they send a lightweight "still active" message to the service worker — throttled to at most roughly once every 5–10 seconds even though mousemove fires far more often than that, to avoid flooding messages. On receiving this ping, the service worker clears and re-creates the `aegis_auto_lock` alarm with the full duration again.
+- If the user changes the auto-lock dropdown mid-session, send an updated `session_unlocked`-style message (or a dedicated `auto_lock_settings_changed` message) with the new value so the service worker reconfigures the alarm — this is what actually fixes the "turning it on mid-session doesn't track activity" bug, because the service worker doesn't care which page is open or when it loaded.
+- On `chrome.alarms.onAlarm`, if `alarm.name === 'aegis_auto_lock'`, the service worker calls the storage module's `clear_session_key()` directly. This works with no popup or manager tab open at all, which is the actual fix for "popup-only users never get auto-locked."
+- You can delete the old `check_auto_lock()` / `reset_auto_lock_timer()` / `auto_lock_timer` / `last_activity_time` local-timer code from `manager.js` entirely once the service worker path replaces it — don't leave both running at once.
+
+### 3.3 — Add a lock/logout control to the popup too
+
+`popup.html`'s unlocked view currently only has Save All Tabs / Save This Tab / View Saved Tabs — no way to lock from the popup itself. Add a small "Lock" button there that calls the same `clear_session_key()` used by manager's lock button and returns the popup to its locked view. This matters more now that auto-lock can genuinely fire while only the popup has ever been used.
+
+### 3.4 — Optional: live sync between popup and manager via `chrome.storage.onChanged`
+
+If time allows: have the service worker (or each page directly) listen for `chrome.storage.onChanged` on the tab-groups key and notify any open manager page to refresh its view when a change originates from elsewhere (e.g. a tab saved from the popup while manager is already open). Not required for correctness — skip if short on time.
+
+**Verify (all of Phase 3):**
+- Set auto-lock to 1 minute in Settings, keep the manager tab open, and stay active in it (move the mouse, click around) for over a minute — it must **not** lock while active.
+- Set auto-lock to 1 minute, then close the manager tab entirely and interact only through the popup, or don't interact at all — the vault must lock after 1 minute regardless.
+- With auto-lock initially off, unlock the vault, *then* turn auto-lock on via the settings dropdown — confirm it now correctly resets on activity instead of firing on a dead timer that ignores what you're doing.
+- Confirm the popup has a working lock control of its own.
+
+---
+
+# Phase 4 — WebAuthn as a second unlock factor
+
+This is the most technically uncertain phase in this document — the exact manifest fields and RP ID rules for WebAuthn inside extensions are a newer capability and details matter. **Before writing code, look up the current MDN page "Use the WebAuthn API in web extensions" and Chrome's own extension WebAuthn documentation, rather than trusting exact syntax below as gospel.** The instructions here describe the intended behavior and safety rules, which don't change even if a specific API detail has moved on.
+
+### 4.1 — Ground rule: the password path must never break
+
+Your actual encryption key is derived from the password via PBKDF2. A WebAuthn assertion by itself cannot reconstruct that key. Do not attempt to make WebAuthn fully replace the password unless you implement the PRF-extension approach in 4.3 below — and even then, the password must remain a fully working fallback forever. Never ship a state where a platform without WebAuthn/PRF support, or a lost/reset authenticator, permanently locks someone out of their own vault.
+
+### 4.2 — Baseline version: WebAuthn as a fast convenience unlock
+
+- Manifest: add whatever `host_permissions` the current documentation says are required for an extension to register a WebAuthn credential with a custom RP ID (check the docs — do not guess this).
+- Add a "Set up Touch ID / Windows Hello / Security Key" control in `manager.html`'s settings panel, unlocked-only. On click: re-verify the current password first (same re-auth pattern as change-password in 2.3), then call `navigator.credentials.create()` requesting a platform authenticator with `userVerification: 'required'`. Store the resulting credential ID on the user object (e.g. `webauthn_credential_id`) — a credential ID is not sensitive on its own.
+- On the unlock screen: if the selected username has a `webauthn_credential_id`, show an additional "Unlock with Touch ID / Security Key" button next to the password field. It calls `navigator.credentials.get()` with that credential ID.
+- Because a bare WebAuthn assertion can't derive the real encryption key on its own, implement this baseline version as: a successful assertion unlocks a **locally wrapped copy** of the vault key (wrap/encrypt the already-derived session key using a device-bound secret you generate and store only after a successful WebAuthn registration — e.g. a random key encrypted at rest, unlockable only after a fresh successful assertion). Be explicit in the UI (a short line of text near the button, like "Fast unlock — your password is still your real master key") so the user understands this is a convenience layer, not a replacement for the password.
+
+### 4.3 — Advanced version (only attempt after 4.2 is fully working and tested)
+
+Use the WebAuthn **PRF extension** to derive real symmetric key material directly from the authenticator ceremony, and use that to wrap/unwrap the actual PBKDF2-derived vault key — so day-to-day unlocking can happen via PRF output without touching the password on that specific device. PRF platform support is real but still uneven across operating systems as of this writing, so:
+- Feature-detect PRF support before offering this path at all; fall back to the 4.2 baseline (or password-only) when it's unavailable.
+- Keep the password-based unlock path fully intact and equally capable of unlocking the vault forever, on every device, regardless of whether PRF was set up on some other device.
+
+If you get stuck on this advanced version, stop and ship only 4.2 — a working convenience-unlock feature is much better than a half-implemented key-wrapping scheme.
+
+**Verify:** an account with WebAuthn set up can unlock via password exactly as before (regression check — this must never break), and can also unlock via the platform authenticator. Removing/disabling the platform authenticator (or testing on a device without one) still leaves password unlock fully working.
+
+---
+
+# Phase 5 — Embedder upgrade: negative sampling + weight quantization
+
+**File:** `common/embedder.js`. Do not touch `calculate_cosine_similarity`, `kmeans_cluster`, `tokenize`, or the public shape of `embed_text`/`extract_embedding`/`suggest_group_name` — they operate on whatever embedding vectors come out of training and don't need to know how those vectors were produced.
+
+### 5.1 — Negative sampling (the actual performance fix)
+
+**Problem:** `forward_pass`/`backward_pass` currently compute a full softmax over the *entire* vocabulary for every single training pair. Cost scales directly with vocabulary size on every step — this is the exact bottleneck the original word2vec paper solved with negative sampling, and it will get slow as a user's saved-tab vocabulary grows.
+
+**Fix:**
+- Add a configurable `negative_sample_count` (default something like 5–15).
+- For each `(center_word, true_context_word)` training pair: instead of scoring all `vocab_size` output units, sample `negative_sample_count` words that are **not** the true context word (uniform random sampling, excluding the true word, is an acceptable simplification — don't get stuck trying to perfectly replicate word2vec's frequency^0.75 weighted sampling if it's slowing you down).
+- Use a sigmoid, not softmax, on just the relevant output units: the true context word is a positive example (target 1), each sampled negative word is a negative example (target 0). Only update the output-layer weight rows for the true word and the sampled negative words, plus the input-layer row for the center word — not all `vocab_size` output rows. This is what makes the per-step cost roughly `O(negative_sample_count)` instead of `O(vocab_size)`.
+- Update the loss calculation to the standard negative-sampling loss (sum of `-log(sigmoid(score))` for the positive example and `-log(sigmoid(-score))` for each negative example) so the existing loss chart still shows a meaningful decreasing trend.
+- Confirm `serialize()`/`deserialize()` still round-trip correctly with anything new you add to support this (e.g. if you build a word-frequency table for sampling, decide whether it needs to be persisted or can just be rebuilt from `create_training_dataset` each time — rebuilding is simpler and is fine).
+
+### 5.2 — Quantize weights before storage
+
+**Problem:** `serialize()` currently writes `weights_input`/`weights_output` as full-precision float arrays converted to plain JSON numbers — this is a large chunk of what makes the model payload big enough to need the IndexedDB chunking fallback in the first place.
+
+**Fix:**
+- In `serialize()`, quantize `weights_input` to int8: compute `scale = max(abs(all values in the array)) / 127`, store each weight as `Math.round(value / scale)` (an int8-range integer) plus the single `scale` number needed to reverse it. In `deserialize()`, reconstruct approximate float values as `int8_value * scale`.
+- `weights_input` is what `extract_embedding()`/`embed_text()` actually read — it directly drives search quality, so test search/clustering quality before and after quantizing it (paste in a batch of varied URLs, train, compare semantic search results) and don't ship it if quality visibly degrades.
+- `weights_output` is only used to resume training if the user clicks "Retrain" on an already-loaded model — it's not read anywhere at inference/search time. To keep this phase simple, you may choose to **not** persist `weights_output` at all, and instead have `deserialize()` leave it `null` and have `train_epochs()` (or wherever weights are initialized) freshly Xavier-initialize a new `weights_output` sized to the loaded `vocab_size`/`embedding_dim` whenever training resumes on a deserialized model, rather than trying to quantize it too. This avoids a precision question that doesn't matter much, since it gets reinitialized on retrain either way.
+
+**Verify:** train on a large, varied vocabulary (paste in many different URLs). Confirm training still completes and the loss chart trends downward. Confirm semantic search and clustering still return sensible, coherent results after training. Confirm the serialized model's stored size is meaningfully smaller than before quantization (spot-check the size in storage).
+
+---
+
+# Phase 6 — On-device AI (Chrome's built-in Prompt API) as a complementary feature
+
+This adds Chrome's built-in, on-device language model (Gemini Nano, via the Prompt API) for something the hand-rolled embedder in `embedder.js` doesn't do well: producing an actual natural-language sentence. It does **not** replace the custom embedder, the semantic search, or the k-means clustering built in earlier phases — those stay exactly as they are and remain the more impressive, harder-to-clone piece of this project. This phase is a small addition on top.
+
+### 6.1 — Feature detection first, always
+
+- The exact API surface for this has changed during its rollout. Before writing code, check Chrome's current "Prompt API" developer documentation for the current availability-check and session-creation method names rather than assuming the ones below are still exact.
+- Check availability before ever calling into it, and if it's unavailable (older Chrome, unsupported hardware, on-device model not downloaded yet), simply hide the relevant UI and change nothing else — the extension must work fully without this feature, the same way semantic search already gracefully falls back to plain text search when no model is trained yet.
+- Do not add this capability anywhere else in the project, and do not add any other network-based or cloud AI call anywhere in the codebase — this API runs entirely on-device, which is the only reason it's consistent with this extension's "nothing leaves the browser" story. Anything that phones out to a server would contradict that.
+
+### 6.2 — Feature: one-line AI summary per saved group
+
+- **File:** `manager_page/manager.js`, inside `create_group_element()`.
+- Add a small affordance per group card (e.g. a "Summarize" button, or auto-generate once and cache) that, when the on-device model is available, sends that group's tab titles and URLs as a prompt asking for one short sentence describing what the group is about, and displays it under the group's title.
+- Cache the generated summary so it isn't regenerated on every page load: store it as an additional field on the group's *decrypted* JSON (e.g. `group_data.ai_summary`), then re-encrypt and save the group exactly the way `rename_session()` already persists a name change — follow that existing function as the pattern to copy.
+- Keep this fully separate from the existing `suggest_group_name()` auto-naming — both can coexist; don't remove or replace the embedder-based naming.
+
+**Verify:** on a Chrome build/machine where the on-device model is available, group cards show a generated one-line summary. On a machine where it isn't available, the summarize affordance simply doesn't appear and everything else works exactly as before.
+
+---
+
+# Phase 7 — Portfolio trust signals
+
+These are what make a reviewer looking at the GitHub repo trust the security claims instead of just reading them.
+
+### 7.1 — `THREAT_MODEL.md` at the repo root
+
+Write this honestly, not aspirationally. Cover, at minimum:
+- **What this protects against:** casual or opportunistic local access to the browser profile — e.g. someone else picking up an unattended, *locked* device and poking through Chrome's storage files finds only ciphertext, because tab data is AES-256-GCM encrypted with a key that only exists in memory after a correct password derivation.
+- **What this explicitly does NOT protect against:** a compromised OS or malware running with the user's own privileges while the vault is *unlocked* — that can read anything in memory or on screen, same as any other unlocked application; a password that's weak, reused, or successfully phished; a WebAuthn-only unlock, if Phase 4 was implemented, is still backed by the password as the real fallback per its own safety rule.
+- **Known limitations:** no cross-device sync (data lives only in the local browser profile, so losing the device without a manual `.aegis` backup means losing the data).
+
+### 7.2 — Unit tests for `common/crypto.js` and `common/embedder.js`
+
+These two files are the most deterministic and highest-value to test. Use a lightweight runner appropriate for a no-build-step vanilla-JS project — Node's built-in `node:test` + `assert` is enough, since both files are plain ES modules and the Web Crypto API is available as `globalThis.crypto` in modern Node, so `crypto.js` doesn't need a browser to test.
+
+Minimum test cases:
+- **crypto.js:** `encrypt()` then `decrypt()` with the same key returns the original plaintext; `decrypt()` with a *different* key throws; `array_buffer_to_base64`/`base64_to_array_buffer` round-trip correctly, including on a large buffer (100,000+ bytes, specifically to exercise the chunked-conversion code path that exists to avoid a stack overflow); `derive_key_from_password` is deterministic for the same password/salt/iteration count; different salts for the same password produce keys that cannot decrypt each other's ciphertext.
+- **embedder.js:** `tokenize()` correctly handles punctuation, casing, and whitespace on a few sample strings; `calculate_cosine_similarity` returns `1.0` for two identical non-zero vectors and `0` when either vector is all zeros; `kmeans_cluster` returns exactly `k` distinct labels (or fewer, gracefully, if there are fewer input points than `k`) and doesn't crash on 1–2 input vectors; a small end-to-end sanity test that trains a tiny embedder briefly on a handful of made-up tab titles spanning 2–3 obviously different topics, then checks that same-topic titles end up more cosine-similar to each other than to different-topic titles — a real check that training is learning something, not just running without errors.
+
+### 7.3 — GitHub Actions CI
+
+Add `.github/workflows/test.yml`: on push and pull request, check out the repo, set up Node, install, and run the test suite from 7.2, failing the build on any test failure. Keep it minimal — no build step is needed for this project.
+
+### 7.4 — `manifest.json` least-privilege audit
+
+If `manifest.json` doesn't exist yet in the repo, create one. If it does, audit it against this list rather than rewriting it blindly:
+- `manifest_version: 3`.
+- `action.default_popup` points at the real popup HTML path.
+- `background.service_worker` points at the file created in Phase 3.
+- `permissions` includes only what's actually used: `storage`, `tabs`, `alarms` (Phase 3), and `unlimitedStorage` (the IndexedDB fallback exists specifically because large model/tab-group payloads can exceed default quotas).
+- `host_permissions` only if Phase 4's WebAuthn RP ID setup ends up requiring it — don't add broad host permissions speculatively.
+- A `content_security_policy` for extension pages that does **not** allow `unsafe-eval` or any remote script source — this project has no external CDN dependencies by design, so it doesn't need either.
+
+---
+
+# Definition of done
+
+Go through this whole list once, at the very end, after every phase above is individually verified:
+
+- [ ] Two separate accounts can be created, used independently, and neither can see the other's tab groups, trained model, or semantic search results.
+- [ ] An account can be deleted (with re-auth) and its data is fully gone.
+- [ ] A password can be changed (with re-auth) and all previously-saved data is still readable afterward under the new password only.
+- [ ] The trained model is per-user and encrypted at rest.
+- [ ] Accounts created before the PBKDF2 change still unlock correctly and silently upgrade to the new iteration count.
+- [ ] A `.aegis` backup, exported from one account, can be imported into a completely fresh install and unlocked with the original password.
+- [ ] Auto-lock works correctly whether only the popup is used, only the manager page is used, or both — including when turned on mid-session.
+- [ ] The popup has its own lock/logout control.
+- [ ] WebAuthn unlock (if implemented) never blocks password unlock as a fallback.
+- [ ] The embedder trains using negative sampling and the stored model is meaningfully smaller after quantization, with no visible drop in search quality.
+- [ ] The on-device AI summary feature degrades gracefully to "not shown" on machines without support, with nothing else in the extension affected.
+- [ ] `THREAT_MODEL.md`, a test suite for `crypto.js`/`embedder.js`, a CI workflow, and a least-privilege `manifest.json` all exist in the repo.
+- [ ] No `console.log` of any password, key material, or decrypted tab content remains anywhere in the codebase.

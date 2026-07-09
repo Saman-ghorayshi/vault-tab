@@ -15,10 +15,16 @@ import {
   OLD_ITERATIONS, CURRENT_ITERATIONS
 } from './common/crypto.js';
 import { get_url_status, derive_title_from_url } from './common/urls.js';
+import { generate_challenge, verify_assertion, make_registration_options } from './common/webauthn.js';
 
 const VERIFIER_STRING = 'aegis-verification-string';
 
-// --- auto-lock timer ---
+// --- pending unlock state ---
+// holds the derived key, username, and webauthn challenge between
+// password verification and passkey assertion. cleared on lock,
+// successful completion, or challenge timeout.
+let pending_unlock = null;
+let pending_unlock_credential = null;
 let lock_timer = null;
 let auto_lock_minutes = 0;
 
@@ -65,6 +71,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     switch (message.type) {
       case 'aegis:unlock': {
         // { type: 'aegis:unlock', username, password }
+        // phase 1: password verification. webauthn second-factor
+        // (if registered) happens in a follow-up 'aegis:unlock-webauthn'
+        // message from the client.
         try {
           const user = await get_user_by_username(message.username);
           if (!user) {
@@ -93,20 +102,91 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               user.password_verifier = new_verifier;
               user.password_iterations = CURRENT_ITERATIONS;
               await save_user(user);
-              await store_session_key(new_key);
+              // stash the derived key for either immediate use or
+              // the webauthn second-factor pending phase
+              pending_unlock = { username: message.username, key: new_key };
             } catch (_) {
-              await store_session_key(key);
+              pending_unlock = { username: message.username, key };
             }
           } else {
-            await store_session_key(key);
+            pending_unlock = { username: message.username, key };
           }
 
-          await set_session_user(message.username);
+          // if this user has a registered passkey, send a webauthn challenge
+          // instead of finishing unlock immediately.
+          if (user.webauthn?.credential_id && user.webauthn?.public_key_cbor) {
+            const challenge = generate_challenge();
+            pending_unlock.challenge = challenge;
+            // expire the challenge after 2 minutes
+            setTimeout(() => {
+              if (pending_unlock?.challenge === challenge) {
+                pending_unlock = null;
+              }
+            }, 120000);
+            sendResponse({
+              ok: true,
+              needs_webauthn: true,
+              webauthn_credential_id: user.webauthn.credential_id,
+              challenge
+            });
+          } else {
+            // no passkey registered — finish unlock immediately
+            await store_session_key(pending_unlock.key);
+            await set_session_user(pending_unlock.username);
+            start_auto_lock_timer();
+            chrome.runtime.sendMessage({
+              type: 'aegis:unlocked',
+              username: pending_unlock.username
+            }).catch(() => {});
+            pending_unlock = null;
+            sendResponse({ ok: true });
+          }
+        } catch (error) {
+          sendResponse({ ok: false, error: error.message });
+        }
+        break;
+      }
+
+      case 'aegis:unlock-webauthn': {
+        // { type: 'aegis:unlock-webauthn', assertion: {...serialized...} }
+        // after password verified, client runs navigator.credentials.get()
+        // and sends us the signed assertion for verification.
+        try {
+          if (!pending_unlock || !pending_unlock.challenge) {
+            sendResponse({ ok: false, error: 'No pending webauthn challenge' });
+            return;
+          }
+          const user = await get_user_by_username(pending_unlock.username);
+          if (!user || !user.webauthn?.public_key_cbor) {
+            sendResponse({ ok: false, error: 'WebAuthn not registered for this account' });
+            return;
+          }
+
+          const origin = `chrome-extension://${chrome.runtime.id}`;
+          const valid = await verify_assertion(
+            user.webauthn.public_key_cbor,
+            pending_unlock.challenge,
+            message.assertion,
+            origin
+          );
+
+          if (!valid) {
+            sendResponse({ ok: false, error: 'WebAuthn verification failed' });
+            pending_unlock = null;
+            return;
+          }
+
+          await store_session_key(pending_unlock.key);
+          await set_session_user(pending_unlock.username);
           start_auto_lock_timer();
-          // broadcast unlock to all open pages
-          chrome.runtime.sendMessage({ type: 'aegis:unlocked', username: message.username }).catch(() => {});
+          chrome.runtime.sendMessage({
+            type: 'aegis:unlocked',
+            username: pending_unlock.username
+          }).catch(() => {});
+          pending_unlock = null;
           sendResponse({ ok: true });
         } catch (error) {
+          pending_unlock = null;
           sendResponse({ ok: false, error: error.message });
         }
         break;
@@ -139,6 +219,66 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const key = await get_session_key();
         const user = await get_session_user();
         sendResponse({ ok: true, unlocked: !!(key && user), username: user });
+        break;
+      }
+
+      case 'aegis:register-webauthn-start': {
+        // generate a registration challenge for the current user
+        try {
+          if (!pending_unlock_credential) {
+            // simple in-memory store for pending registration
+            pending_unlock_credential = {};
+          }
+          const challenge = generate_challenge();
+          pending_unlock_credential.challenge = challenge;
+          setTimeout(() => {
+            if (pending_unlock_credential?.challenge === challenge) {
+              pending_unlock_credential = null;
+            }
+          }, 120000);
+          sendResponse({ ok: true, challenge });
+        } catch (error) {
+          sendResponse({ ok: false, error: error.message });
+        }
+        break;
+      }
+
+      case 'aegis:register-webauthn-complete': {
+        // store the credential after successful browser-side registration
+        try {
+          const session_user = await get_session_user();
+          if (!session_user) {
+            sendResponse({ ok: false, error: 'Not logged in' });
+            return;
+          }
+          if (!pending_unlock_credential) {
+            sendResponse({ ok: false, error: 'No pending registration' });
+            return;
+          }
+          const user = await get_user_by_username(session_user);
+          if (!user) {
+            sendResponse({ ok: false, error: 'User not found' });
+            return;
+          }
+
+          // parse the attestation response to get the public key
+          const { credential_id, public_key_cbor } = message;
+          if (!credential_id || !public_key_cbor) {
+            sendResponse({ ok: false, error: 'Missing credential data' });
+            return;
+          }
+
+          user.webauthn = {
+            credential_id,
+            public_key_cbor
+          };
+          await save_user(user);
+          pending_unlock_credential = null;
+          sendResponse({ ok: true });
+        } catch (error) {
+          pending_unlock_credential = null;
+          sendResponse({ ok: false, error: error.message });
+        }
         break;
       }
 
