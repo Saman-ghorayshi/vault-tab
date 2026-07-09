@@ -63,9 +63,35 @@ All 4 test files pass:
 
 Total: 38 tests, 0 failures.
 
+## Post-completion bug sweep (2026-07-10)
+
+After all 7 phases were verified, a full code review found 5 more real bugs:
+
+- `36abebc` — removed unused `activeTab` permission from manifest. The
+  `tabs` permission already covers `chrome.tabs.query()`, so `activeTab`
+  was redundant. `contextMenus` stays (used by the right-click menu).
+- `6ec8c70` — removed 8 leftover `.txt` backup files in
+  `common/New folder/` that were committed by accident early in the
+  project. They were never imported by anything and cluttered the repo.
+- `7511b27` — fixed `prompt_api_available()` to return a Promise instead
+  of null/boolean. The old version returned `null` on the first call
+  (before the async availability check resolved), so the Summarize
+  button never appeared on first page load. The caller also tried
+  `.then()` on a cached boolean, which would throw TypeError at runtime.
+- `6a71de4` — clear `pending_unlock` and `pending_unlock_credential`
+  on lock. Before this, if a user verified their password but locked
+  before finishing the WebAuthn second factor, the derived key stayed in
+  the service worker's memory even after the lock.
+- `39af0c8` — replaced 2 `setTimeout` challenge-expiry calls with
+  `chrome.alarms`. The setTimeout timers would be killed when the
+  service worker suspends (~30s of inactivity), leaving the challenge
+  and its derived key stuck in memory indefinitely. Named alarms survive
+  suspension — same approach already used for auto-lock.
+
 ## What's left
 
-Implementation is complete across all 7 phases. The only verification gap is
-Phase 6 (on-device AI) which requires a Chrome build with Gemini Nano to
-exercise end-to-end — the feature-detection and graceful-degradation paths
-ensure it does no harm on machines without it.
+Implementation is complete across all 7 phases plus the post-completion
+bug sweep. The only verification gap is Phase 6 (on-device AI) which
+requires a Chrome build with Gemini Nano to exercise end-to-end — the
+feature-detection and graceful-degradation paths ensure it does no harm
+on machines without it.
