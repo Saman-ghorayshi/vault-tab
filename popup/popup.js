@@ -49,6 +49,8 @@ function render_setup_view(auto_login = true) {
   const unlocked_view = document.getElementById('unlocked-view');
   const current_user_label = document.getElementById('current-user-label');
 
+  const unlock_view = document.getElementById('unlock-view');
+  if (unlock_view) unlock_view.classList.add('hidden');
   setup_view.classList.remove('hidden');
   setup_error.classList.add('hidden');
   setup_username.value = '';
@@ -523,6 +525,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     add_account_btn.addEventListener('click', () => {
       unlocked_view.classList.add('hidden');
       locked_view.classList.remove('hidden');
+      unlock_view.classList.add('hidden');
       render_setup_view(false);
     });
   }
