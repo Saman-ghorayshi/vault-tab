@@ -1972,6 +1972,96 @@ async function handle_change_password() {
   }
 }
 
+// --- on-device AI summary (Phase 6) ---
+// uses Chrome's built-in Prompt API (Gemini Nano) to generate a one-line
+// summary of a saved tab group. runs entirely on-device — no network call.
+// if the API is unavailable (older chrome, unsupported hardware, model not
+// downloaded), every call returns null/false and the summarize button just
+// doesn't appear. the extension is fully functional without this feature.
+
+// feature-detection: returns true if the Prompt API is available and ready.
+// caches the result so we don't check on every group render.
+let _prompt_api_cache = null;
+function prompt_api_available() {
+  if (_prompt_api_cache !== null) return _prompt_api_cache;
+  // LanguageModel is the current API surface (replaced the earlier AIAssistant).
+  // availability() returns one of: 'readily', 'available', 'downloadable', 'unavailable'.
+  // we only offer the button if the model is ready right now ('readily').
+  if (typeof LanguageModel === 'undefined') {
+    _prompt_api_cache = false;
+    return false;
+  }
+  // async check — returns a promise. callers that need sync use the cached value.
+  LanguageModel.availability().then(status => {
+    _prompt_api_cache = (status === 'readily' || status === 'available');
+  }).catch(() => { _prompt_api_cache = false; });
+  // optimistic: return false until the async check resolves, then subsequent
+  // calls will use the cached value. the button starts disabled and gets
+  // enabled when the async check confirms availability.
+  return _prompt_api_cache;
+}
+
+// generate a one-line summary of a tab group using the on-device model.
+// returns a string or null if the model couldn't produce one.
+async function generate_ai_summary(group_data) {
+  if (typeof LanguageModel === 'undefined') return null;
+
+  let session = null;
+  try {
+    session = await LanguageModel.create();
+    // build a simple prompt from tab titles (drop URLs to keep it short).
+    // the model is asked for ONE sentence, not a paragraph.
+    const titles = group_data.tabs
+      .map(t => t.title || '')
+      .filter(t => t.length > 0)
+      .join('\n- ');
+    const prompt =
+      'These are browser tab titles saved together in one group. ' +
+      'Write ONE short sentence (no more than 15 words) describing what ' +
+      'this group of tabs is about. Just the sentence, no preamble:\n' +
+      '- ' + titles;
+
+    const result = await session.prompt(prompt);
+    // clean up: trim whitespace and take just the first line
+    const summary = result.trim().split('\n')[0].trim();
+    return summary || null;
+  } catch (error) {
+    console.error('Aegis Tab: on-device AI prompt failed:', error);
+    return null;
+  } finally {
+    if (session) {
+      try { session.destroy(); } catch (_) {}
+    }
+  }
+}
+
+// persist a generated ai_summary as an extra field on the group's
+// decrypted data, re-encrypting exactly the way rename_session does.
+// follows the same re-read-fresh-before-write pattern to avoid clobbering
+// concurrent saves from the popup or another manager tab.
+async function persist_ai_summary(group_id, summary, group_data) {
+  const session_key = await get_session_key();
+  if (!session_key) return;
+
+  let groups = await get_tab_groups(active_username);
+  const group_index = groups.findIndex(g => g.id === group_id);
+  if (group_index === -1) return;
+
+  group_data.ai_summary = summary;
+  const encrypted = await encrypt(JSON.stringify(group_data), session_key);
+
+  // re-read fresh before writing — same pattern as rename_session
+  groups = await get_tab_groups(active_username);
+  const idx = groups.findIndex(g => g.id === group_id);
+  if (idx === -1) return;
+  groups[idx] = {
+    id: group_id,
+    iv: encrypted.iv,
+    ciphertext: encrypted.ciphertext
+  };
+  await save_tab_groups(active_username, groups);
+}
+
 function create_group_element(group_id, group_data, group_index = 0) {
   const group_element = document.createElement('div');
   group_element.className = 'group-card';
@@ -2141,6 +2231,53 @@ function create_group_element(group_id, group_data, group_index = 0) {
 
   group_element.appendChild(header);
   group_element.appendChild(tabs_list);
+
+  // --- on-device AI summary (Phase 6) ---
+  // if the group already has a cached ai_summary (from a previous session),
+  // show it directly. otherwise, if Chrome's built-in Prompt API is available,
+  // show a "Summarize" button. if the API is unavailable, show nothing —
+  // the extension works fully without this feature, same as semantic search
+  // gracefully falls back when no model is trained.
+  if (group_data.ai_summary) {
+    const summary_el = document.createElement('p');
+    summary_el.className = 'group-ai-summary';
+    summary_el.textContent = group_data.ai_summary;
+    header.parentNode.insertBefore(summary_el, tabs_list);
+  } else if (prompt_api_available()) {
+    const summarize_btn = document.createElement('button');
+    summarize_btn.className = 'summarize-button secondary-button';
+    summarize_btn.textContent = 'Summarize';
+    summarize_btn.disabled = true;
+    summarize_btn.title = 'Generate a one-line AI summary of this group (on-device)';
+    actions_div.appendChild(summarize_btn);
+    // enable after feature-detection completes asynchronously
+    prompt_api_available().then(available => {
+      if (available) summarize_btn.disabled = false;
+    });
+    summarize_btn.addEventListener('click', async () => {
+      summarize_btn.disabled = true;
+      summarize_btn.textContent = 'Summarizing...';
+      try {
+        const summary = await generate_ai_summary(group_data);
+        if (summary) {
+          await persist_ai_summary(group_id, summary, group_data);
+          // replace the button with the summary text
+          const summary_el = document.createElement('p');
+          summary_el.className = 'group-ai-summary';
+          summary_el.textContent = summary;
+          summarize_btn.replaceWith(summary_el);
+        } else {
+          // model couldn't produce a summary — just remove the button
+          summarize_btn.remove();
+        }
+      } catch (error) {
+        console.error('Aegis Tab: AI summary failed:', error);
+        summarize_btn.textContent = 'Summarize';
+        summarize_btn.disabled = false;
+        show_toast('AI summary unavailable.', 'error');
+      }
+    });
+  }
 
   group_element.querySelector('.restore-button').addEventListener('click', async () => {
     const urls = group_data.tabs.map(tab => tab.url);

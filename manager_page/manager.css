@@ -1151,3 +1151,20 @@ button:disabled {
 .secondary-link a:hover {
   text-decoration: underline;
 }
+
+/* on-device AI summary per saved group (Phase 6) */
+.group-ai-summary {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin: 4px 0 0 0;
+  padding: 4px 8px;
+  border-left: 2px solid var(--accent);
+  line-height: 1.4;
+}
+
+.summarize-button {
+  font-size: 11px;
+  padding: 2px 8px;
+  margin-left: 6px;
+}
