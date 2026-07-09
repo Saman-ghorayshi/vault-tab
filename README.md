@@ -1,31 +1,21 @@
 # Aegis Tab
 
-A Chrome extension that securely saves, manages, and restores browser tabs using zero-knowledge AES-256-GCM encryption.
-
-Your tab data is encrypted with a master password that never leaves your device. The encryption key is derived using PBKDF2 (310,000 iterations) and stored only in session memory while the extension is unlocked.
+A Chrome extension that securely saves, manages, and restores browser tabs using zero-knowledge AES-256-GCM encryption. No server, no cloud, no tracking — your tab data never leaves your browser.
 
 ## Features
 
-- **Multi-user support** - Create multiple user accounts, each with their own encrypted tab store. A dropdown lets you pick which user to unlock as. Useful for shared computers or separating work and personal tabs.
-- **Encrypted tab sessions** - All saved tabs are encrypted with AES-256-GCM via the Web Crypto API. No server, no cloud, no tracking.
-- **Master password with strength meter** - A password strength meter shows Weak/Medium/Strong as you type. Show/hide toggle on every password field.
-- **Auto-lock timer** - Automatically lock the extension after a period of inactivity. Configurable: off, 5, 10, 15, 30, or 60 minutes.
-- **Right-click context menu** - Right-click anywhere on a page and select "Save to Aegis Tab" to save it instantly. Right-click a link to save just the link.
-- **Session rename** - Double-click any session title to give it a custom name instead of just the date.
-- **Lock** - Instantly clear the session key from the manager page to re-lock the extension. Hides all UI until unlocked again.
-- **Search** - Filter saved tabs by title or URL in real time.
-- **Floating action panel** - When you select tabs, a panel slides in from the right edge with Open, Delete, Export, and Clear buttons. No scrolling needed.
-- **Drag-and-drop reordering** - Drag tabs to reorder them within a group. Changes are persisted to encrypted storage immediately.
-- **Keyboard shortcuts** - Vim-style navigation (J/K), Gmail-style selection (X), slash to search, and more. Press ? for a full guide.
-- **Encrypted backup export/import** - Export all sessions as a .aegis file. Import on another machine. Contains ciphertext only.
-- **Batched tab restoration** - Restore dozens of tabs without freezing the browser. Tabs are created in parallel batches.
-- **Parallel decryption** - All sessions are decrypted simultaneously with Promise.all for fast page loads.
-- **Import and paste URLs** - Import a .txt file of URLs, or paste any text and have URLs auto-extracted.
-- **Export URLs** - Export any session's URLs as a plain text file.
-- **Undo with progress bar** - Soft-delete with an 8-second undo window. Visual progress bar and smart messaging.
-- **Dark theme** - Clean dark UI with staggered animations.
-- **Neural embedding engine** - A from-scratch neural network (Word2Vec Skip-gram) that learns custom embeddings on your decrypted tab data. Provides semantic search, K-Means clustering, and a live training analytics panel with loss visualization. Automatically fine-tunes when you save new tabs.
-- **Manifest V3** - Built for the latest Chrome extension platform.
+- **Zero-knowledge encryption** — All tab data is encrypted with AES-256-GCM via the Web Crypto API. Your password is never stored; the key exists only in session memory while unlocked.
+- **Multi-user accounts** — Create separate accounts, each with its own salt, verifier, and encrypted tab store. Account creation, deletion (with re-auth), and password change (with full re-encryption) are all built in.
+- **WebAuthn second-factor unlock** — Register a passkey (Touch ID, Windows Hello, or security key) for fast unlock. The password path always works as a fallback — WebAuthn is a convenience layer, never a replacement.
+- **On-device AI summaries** — Uses Chrome's built-in Prompt API (Gemini Nano) to generate one-line summaries of saved tab groups. Runs entirely on-device — no network call. Gracefully hidden when unavailable.
+- **Neural embedding engine** — A from-scratch Word2Vec Skip-gram neural network (no libraries) that learns custom embeddings on your tab data. Provides semantic search, K-Means clustering, and a live training analytics panel with loss visualization.
+- **Auto-lock** — Automatically locks the vault after inactivity. Configurable: off, 5, 10, 15, 30, or 60 minutes. Works even if only the popup is open — the service worker owns the timer via `chrome.alarms`.
+- **Encrypted backup** — Export all sessions as a `.aegis` file. Import on a fresh install — the backup includes credentials so the original password still works.
+- **Semantic search** — Toggle between plain text search and meaning-based search powered by the trained embedder.
+- **Keyboard shortcuts** — Vim-style navigation (J/K), Gmail-style selection (X), slash to search, and more.
+- **Drag-and-drop reordering** — Reorder tabs within a group. Changes persist to encrypted storage immediately.
+- **Dark theme** — Clean dark UI with staggered animations.
+- **Manifest V3** — Built for the latest Chrome extension platform.
 
 ## Installation
 
@@ -43,19 +33,19 @@ Your tab data is encrypted with a master password that never leaves your device.
 ### First run
 1. Click the extension icon
 2. Enter a username and password (minimum 8 characters)
-3. Your password is used to derive an encryption key - it is never stored
+3. Your password derives an encryption key via PBKDF2 — it is never stored
 
 ### Saving tabs
-- **Save All Tabs** - Encrypts and saves all tabs in the current window, then closes them
-- **Save This Tab** - Saves only the currently active tab
-- **Right-click > Save to Aegis Tab** - Save the current page or a link via context menu
+- **Save All Tabs** — Encrypts and saves all tabs in the current window, then closes them
+- **Save This Tab** — Saves only the currently active tab
+- **Right-click > Save to Aegis Tab** — Save the current page or a link via context menu
 
 ### Managing tabs
-- Click **View Saved Tabs** to open the manager
-- Use **Search** to filter tabs by title or URL
+- Click **View Saved Tabs** to open the manager page
+- Use **Search** to filter tabs (toggle **Semantic** for meaning-based search after training)
 - Double-click a session title to rename it
 - Click **Restore All** to open all tabs in a session
-- Click **Private** to restore into an incognito window
+- Click **Incognito** to restore into a private window
 - Drag tabs to reorder them within a group
 - Select tabs (click, Ctrl+Click, Shift+Click) to use the floating action panel
 - Click **Lock** to clear the session key and re-lock
@@ -75,37 +65,44 @@ Your tab data is encrypted with a master password that never leaves your device.
 | Esc | Clear selection / close modal |
 | ? | Open shortcuts guide |
 
-Press **?** on the manager page to see the full guide as an overlay.
-
 ### Neural Embedding Engine
-- Click **Train Model** in the analytics panel to train the network on your tab data
+- Click **Train Model** in the analytics panel to train on your tab data
 - Watch the loss chart decrease in real time as the model converges
-- Toggle **Semantic** next to the search bar for meaning-based search instead of text matching
+- Toggle **Semantic** next to the search bar for meaning-based search
 - After training, tabs get colored cluster badges showing their K-Means group
-- The model persists across sessions and auto-fine-tunes when you save new tabs
+- The trained model is encrypted with your session key and stored per-user
 
 ### Settings
-- **Always restore to Private window** - Toggle to always use incognito
-- **Auto-lock after** - Automatically lock after inactivity (off, 5-60 min)
+- **Always restore to Private window** — Toggle to always use incognito
+- **Auto-lock after** — Automatically lock after inactivity (off, 5-60 min)
 
 ## Architecture
 
 ```
 aegis-tab/
-├── manifest.json          # MV3 manifest (v2.1.0)
-├── background.js           # Service worker: context menu to save tabs
+├── manifest.json          # MV3 manifest (v2.3.0)
+├── background.js          # Service worker: session lifecycle, auto-lock, context menu
 ├── common/
-│   ├── crypto.js           # AES-256-GCM encrypt/decrypt, PBKDF2 key derivation
+│   ├── crypto.js          # AES-256-GCM encrypt/decrypt, PBKDF2 key derivation
 │   ├── storage.js          # Multi-user storage, session key, settings, model persistence
-│   └── embedder.js         # From-scratch neural network (Skip-gram), cosine similarity, K-Means
+│   ├── embedder.js         # From-scratch neural network (Skip-gram + negative sampling)
+│   ├── webauthn.js          # WebAuthn registration/assertion, CBOR/COSE key parsing
+│   ├── idb_storage.js       # IndexedDB chunked storage fallback for large payloads
+│   └── urls.js              # URL classification (restorable, system, local file)
 ├── popup/
-│   ├── popup.html          # Extension popup UI
-│   ├── popup.css           # Popup styles
-│   └── popup.js            # User setup, unlock, save tabs logic
+│   ├── popup.html           # Extension popup UI
+│   ├── popup.css            # Popup styles
+│   └── popup.js             # User setup, unlock, save tabs, lock
 ├── manager_page/
-│   ├── manager.html        # Full-page tab manager
-│   ├── manager.css         # Manager styles
-│   └── manager.js          # Decrypt, render, restore, search, lock, auto-lock, rename
+│   ├── manager.html         # Full-page tab manager
+│   ├── manager.css          # Manager styles
+│   └── manager.js           # Decrypt, render, restore, search, clustering, AI summary
+├── test_crypto.mjs          # crypto.js tests (11 tests)
+├── test_embedder.mjs        # embedder.js tests (16 tests)
+├── test_phase5.mjs          # negative sampling + quantization tests (11 tests)
+├── test_cose_parse.mjs      # WebAuthn COSE/CBOR parsing regression test
+├── .github/workflows/test.yml  # CI: runs all tests on push/PR (Node 18/20/22)
+├── THREAT_MODEL.md          # Honest security model: what it protects, what it doesn't
 └── icons/
     ├── icon16.png
     ├── icon48.png
@@ -114,61 +111,65 @@ aegis-tab/
 
 ### Security model
 
-1. **Key derivation** - The master password is run through PBKDF2 with SHA-256 and 310,000 iterations to derive a 256-bit AES-GCM key.
-2. **Verification** - A known string is encrypted with the derived key and stored as a verifier. On unlock, if decryption succeeds, the password is correct.
-3. **Encryption** - Each tab session is serialized to JSON and encrypted with AES-256-GCM using a random 12-byte IV.
-4. **Session key** - After unlock, the raw key is exported to `chrome.storage.session`, which is cleared when the browser closes.
-5. **Auto-lock** - Optional idle timer clears the session key after inactivity.
-6. **Zero knowledge** - No plaintext tab data is ever written to disk. Only ciphertext, IVs, and the salt are persisted.
-7. **Multi-user** - Each user has their own salt and verifier. Users cannot decrypt each other's tabs without the correct password.
+1. **Key derivation** — The master password is run through PBKDF2-HMAC-SHA256 at 600,000 iterations to derive a 256-bit AES-GCM key. Accounts created before this change used 310,000 iterations and are transparently upgraded on their next successful unlock.
+2. **Verification** — A known string is encrypted with the derived key and stored as a verifier. On unlock, if decryption succeeds, the password is correct.
+3. **Encryption** — Each tab session is serialized to JSON and encrypted with AES-256-GCM using a random 12-byte IV. The trained neural network model is also encrypted at rest — its vocabulary is derived from your tab data, so leaving it plaintext would leak that data.
+4. **Session key** — After unlock, the raw key is exported to `chrome.storage.session`, which is cleared when the browser closes. The service worker owns the session lifecycle; auto-lock fires even if no page is open.
+5. **Per-user isolation** — Each user has their own salt, verifier, tab groups, and trained model. No account can access another's data.
+6. **Zero knowledge** — No plaintext tab data or model data is ever written to disk. Only ciphertext, IVs, salts, and verifiers are persisted.
+7. **WebAuthn** — A passkey (Touch ID, Windows Hello, security key) can be registered as a fast unlock convenience. The password remains the real master key and always works as a fallback. The passkey does not derive the encryption key — it unlocks a locally-wrapped copy of the session key.
+8. **Backup portability** — `.aegis` backup files include the salt, verifier, and iteration count so they can be restored on a fresh install. The original password still works — a salt and verifier are not secret on their own; recovering the password from them still requires brute-forcing through PBKDF2.
+
+See [THREAT_MODEL.md](THREAT_MODEL.md) for the full security model including what this extension does and does not protect against.
 
 ### Neural Network Architecture
 
 The embedding engine is a from-scratch Word2Vec Skip-gram implementation in pure JavaScript with zero external dependencies.
 
-- **Architecture**: Single hidden layer (embedding lookup) with softmax output
+- **Architecture**: Single hidden layer (embedding lookup) with negative-sampling output
+- **Negative sampling**: Instead of scoring the full vocabulary per training step, only the true context word + 10 sampled negatives are scored. Per-step cost is O(k) instead of O(vocab_size). Uses sigmoid + binary cross-entropy instead of softmax.
+- **Weight quantization**: `weights_input` is quantized to int8 + one scale factor before storage (~4-5x smaller payload). `weights_output` is not persisted — it's freshly Xavier-initialized on retrain since it's only used during training, not inference.
 - **Initialization**: Xavier initialization on flat Float32Array weight matrices
-- **Forward pass**: Embedding row lookup + dot product + softmax
-- **Backward pass**: Cross-entropy gradient computation and SGD weight update
 - **Training data**: Tab titles and URLs are tokenized into words, then skip-gram context pairs are generated with a window size of 2
 - **Training loop**: Chunked with setTimeout (200 pairs per frame) to avoid blocking the UI
 - **Embedding extraction**: Averages the input weight rows for all tokens in a tab's text
 - **Semantic search**: Tokenizes the query, embeds it, and ranks tabs by cosine similarity
 - **Clustering**: Raw K-Means with cosine distance, k=5, max 30 iterations
-- **Persistence**: The trained model is serialized to JSON and stored in chrome.storage.local
-- **Fine-tuning**: When new tabs are saved, the model runs 3 quick epochs at a low learning rate
+- **Persistence**: The trained model is encrypted with the session key and stored per-user in chrome.storage.local, with an IndexedDB chunked fallback for large payloads
 
-All matrix math uses flat typed arrays (Float32Array) to minimize garbage collection pressure and keep execution fast.
+All matrix math uses flat typed arrays (Float32Array) to minimize garbage collection pressure.
+
+## Testing
+
+No build step required. The extension runs directly from source using ES modules.
+
+```bash
+# run the full test suite
+node --test test_crypto.mjs
+node --test test_embedder.mjs
+node --test test_phase5.mjs
+node test_cose_parse.mjs
+```
+
+CI runs all 4 test suites on Node 18/20/22 via GitHub Actions on every push and pull request.
 
 ## Tech stack
 
 - Chrome Extension Manifest V3
 - Vanilla JavaScript (ES modules)
 - Web Crypto API (PBKDF2 + AES-256-GCM)
-- Chrome Storage API (local + session)
+- WebAuthn API (navigator.credentials)
+- Chrome AI API (LanguageModel / Gemini Nano)
+- Chrome Storage API (local + session + IndexedDB)
 - No dependencies, no build step
 
-## Development
-
-No build step required. The extension runs directly from source using ES modules.
-
-To test changes:
-1. Make edits to any file
-2. Go to `chrome://extensions/`
-3. Click the reload button on the Aegis Tab card
-4. Test the extension
-
-### Coding conventions
+## Coding conventions
 
 - Custom variables and functions use `snake_case`
 - Native browser APIs (like `chrome.storage.local.get`) retain their camelCase names
-- Comments are simple and direct
-- No emojis in code or UI
+- Comments are simple and direct — explain why, not what
+- Zero external dependencies by design
 
 ## License
 
-MIT - see [LICENSE](LICENSE)
-
-## Contributing
-
-Contributions are welcome. Please open an issue or submit a pull request.
+MIT — see [LICENSE](LICENSE)
