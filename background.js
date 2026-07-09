@@ -384,3 +384,93 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     console.error('Aegis Tab: context menu save failed:', error);
   }
 });
+
+// handle keyboard shortcuts (commands)
+chrome.commands.onCommand.addListener(async (command) => {
+  try {
+    const session_key = await get_session_key();
+    const session_user = await get_session_user();
+
+    if (!session_key || !session_user) {
+      chrome.action.openPopup?.();
+      return;
+    }
+
+    if (command === 'save_current_tab') {
+      const [active_tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!active_tab) return;
+      const target_url = active_tab.url || active_tab.pendingUrl || '';
+      if (!target_url) return;
+      const status = get_url_status(target_url);
+      const title = derive_title_from_url(target_url, active_tab.title);
+
+      const tab_data = {
+        date: new Date().toISOString(),
+        tabs: [{
+          id: crypto.randomUUID(),
+          title: title,
+          url: target_url,
+          fav_icon_url: active_tab.favIconUrl || null,
+          status: status
+        }]
+      };
+
+      const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
+      const groups = await get_tab_groups(session_user);
+      groups.unshift({
+        id: crypto.randomUUID(),
+        iv: encrypted.iv,
+        ciphertext: encrypted.ciphertext
+      });
+      await save_tab_groups(session_user, groups);
+    } else if (command === 'save_all_tabs') {
+      const all_tabs = await chrome.tabs.query({ currentWindow: true }) || [];
+      const manager_url = chrome.runtime.getURL('manager_page/manager.html');
+
+      const tabs_to_save = [];
+      const tab_ids_to_remove = [];
+
+      for (const tab of all_tabs) {
+        const target_url = tab.url || tab.pendingUrl || '';
+        if (!target_url || target_url === manager_url) continue;
+        const status = get_url_status(target_url);
+        const title = derive_title_from_url(target_url, tab.title);
+
+        tabs_to_save.push({
+          id: crypto.randomUUID(),
+          title: title,
+          url: target_url,
+          fav_icon_url: tab.favIconUrl || null,
+          status: status
+        });
+        if (status === 'ok') {
+          tab_ids_to_remove.push(tab.id);
+        }
+      }
+
+      if (tabs_to_save.length === 0) return;
+
+      const tab_data = {
+        date: new Date().toISOString(),
+        tabs: tabs_to_save
+      };
+
+      const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
+      const groups = await get_tab_groups(session_user);
+      groups.unshift({
+        id: crypto.randomUUID(),
+        iv: encrypted.iv,
+        ciphertext: encrypted.ciphertext
+      });
+      await save_tab_groups(session_user, groups);
+
+      const manager_tab = await chrome.tabs.create({ url: manager_url });
+      const final_ids = tab_ids_to_remove.filter(id => id !== manager_tab.id);
+      if (final_ids.length > 0) {
+        await chrome.tabs.remove(final_ids);
+      }
+    }
+  } catch (err) {
+    console.error('Aegis Tab shortcut error:', err);
+  }
+});
