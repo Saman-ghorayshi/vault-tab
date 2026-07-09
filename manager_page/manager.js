@@ -349,6 +349,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       // show password prompt
       loading_message.classList.add('hidden');
       password_prompt_view.classList.remove('hidden');
+      manager_password.value = '';
+      manager_unlock_button.disabled = false;
+      manager_unlock_button.textContent = 'Unlock';
+      await refresh_manager_user_list();
       setTimeout(() => manager_password.focus(), 100);
     });
   }
@@ -395,19 +399,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       password_prompt_view.classList.add('hidden');
       show_manager_setup_modal(false);
     } else {
-      const manager_username_select = document.getElementById('manager-username-select');
-      const manager_username_wrapper = document.getElementById('manager-username-wrapper');
-      if (all_users.length > 1 && manager_username_select) {
-        manager_username_wrapper?.classList.remove('hidden');
-        all_users.forEach(u => {
-          const option = document.createElement('option');
-          option.value = u.username;
-          option.textContent = u.username;
-          manager_username_select.appendChild(option);
-        });
-      } else if (all_users.length === 1 && manager_username_select) {
-        manager_username_select.value = all_users[0].username;
-      }
+      await refresh_manager_user_list();
     }
 
     setTimeout(() => manager_password.focus(), 100);
@@ -417,9 +409,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     manager_unlock_button.addEventListener('click', async () => {
+      const current_users = await get_all_users();
       const password = manager_password.value;
-      const username = all_users.length === 1
-        ? all_users[0].username
+      const username = current_users.length === 1
+        ? current_users[0].username
         : manager_username_select?.value;
       manager_error.classList.add('hidden');
       if (!password) {
@@ -481,6 +474,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       } catch (error) {
         manager_error.textContent = 'Invalid username or password';
         manager_error.classList.remove('hidden');
+      } finally {
         manager_unlock_button.disabled = false;
         manager_unlock_button.textContent = 'Unlock';
       }
@@ -1513,6 +1507,37 @@ function show_rename_modal(group_id, current_name, title_el) {
   });
 }
 
+let is_refreshing_manager_users = false;
+async function refresh_manager_user_list() {
+  if (is_refreshing_manager_users) return;
+  is_refreshing_manager_users = true;
+  try {
+    const select = document.getElementById('manager-username-select');
+    const wrapper = document.getElementById('manager-username-wrapper');
+    if (!select || !wrapper) return;
+    const users = await get_all_users();
+    select.innerHTML = '<option value="">Select user...</option>';
+    if (users.length > 1) {
+      wrapper.classList.remove('hidden');
+      users.forEach(u => {
+        const option = document.createElement('option');
+        option.value = u.username;
+        option.textContent = u.username;
+        select.appendChild(option);
+      });
+    } else if (users.length === 1) {
+      wrapper.classList.add('hidden');
+      const option = document.createElement('option');
+      option.value = users[0].username;
+      option.textContent = users[0].username;
+      select.appendChild(option);
+      select.value = users[0].username;
+    }
+  } finally {
+    is_refreshing_manager_users = false;
+  }
+}
+
 // show the manager's account setup modal.
 // if from_unlock is true, hiding it returns to the unlock prompt.
 function show_manager_setup_modal(from_unlock) {
@@ -1595,23 +1620,9 @@ async function handle_manager_setup_submit() {
     if (from_unlock) {
       // came from the unlock screen: return to it so user can unlock as the new account
       document.getElementById('password-prompt-view').classList.remove('hidden');
+      document.getElementById('manager-unlock-button').disabled = false;
       // refresh the dropdown
-      const select = document.getElementById('manager-username-select');
-      const wrapper = document.getElementById('manager-username-wrapper');
-      select.innerHTML = '';
-      const users = await get_all_users();
-      if (users.length > 1) {
-        wrapper?.classList.remove('hidden');
-        users.forEach(u => {
-          const opt = document.createElement('option');
-          opt.value = u.username;
-          opt.textContent = u.username;
-          select.appendChild(opt);
-        });
-      } else {
-        wrapper?.classList.add('hidden');
-        select.value = users[0]?.username || '';
-      }
+      await refresh_manager_user_list();
     } else {
       show_toast(`Account "${username}" created.`, 'success');
     }

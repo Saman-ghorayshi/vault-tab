@@ -63,7 +63,19 @@ async function get_raw_tab_groups() {
 export async function get_all_users() {
   await migrate_old_format();
   const result = await chrome.storage.local.get(STORAGE_KEYS.users);
-  return result[STORAGE_KEYS.users] || [];
+  const raw = result[STORAGE_KEYS.users] || [];
+  const seen = new Set();
+  const deduplicated = [];
+  for (const u of raw) {
+    if (u && u.username && !seen.has(u.username)) {
+      seen.add(u.username);
+      deduplicated.push(u);
+    }
+  }
+  if (deduplicated.length !== raw.length) {
+    await save_all_users(deduplicated);
+  }
+  return deduplicated;
 }
 
 export async function save_all_users(users_array) {

@@ -145,24 +145,34 @@ async function handle_setup_submit(u_el, p_el, pc_el, btn_el, err_el, auto_login
 }
 
 // (re)populate the unlock screen's username dropdown from the current user list.
+let is_refreshing_unlock_users = false;
 async function refresh_unlock_user_list() {
-  const select = document.getElementById('unlock-username-select');
-  const wrapper = document.getElementById('unlock-username-wrapper');
-  if (!select || !wrapper) return;
-  select.innerHTML = '';
-  const users = await get_all_users();
-  if (users.length > 1) {
-    wrapper.classList.remove('hidden');
-    users.forEach(u => {
+  if (is_refreshing_unlock_users) return;
+  is_refreshing_unlock_users = true;
+  try {
+    const select = document.getElementById('unlock-username-select');
+    const wrapper = document.getElementById('unlock-username-wrapper');
+    if (!select || !wrapper) return;
+    const users = await get_all_users();
+    select.innerHTML = '<option value="">Select user...</option>';
+    if (users.length > 1) {
+      wrapper.classList.remove('hidden');
+      users.forEach(u => {
+        const option = document.createElement('option');
+        option.value = u.username;
+        option.textContent = u.username;
+        select.appendChild(option);
+      });
+    } else if (users.length === 1) {
+      wrapper.classList.add('hidden');
       const option = document.createElement('option');
-      option.value = u.username;
-      option.textContent = u.username;
+      option.value = users[0].username;
+      option.textContent = users[0].username;
       select.appendChild(option);
-    });
-    select.value = users[0].username;
-  } else if (users.length === 1) {
-    wrapper.classList.add('hidden');
-    select.value = users[0].username;
+      select.value = users[0].username;
+    }
+  } finally {
+    is_refreshing_unlock_users = false;
   }
 }
 
@@ -236,25 +246,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     unlock_view.classList.remove('hidden');
 
     // populate user dropdown if multiple users
-    if (all_users.length > 1 && unlock_username_select) {
-      unlock_username_wrapper.classList.remove('hidden');
-      all_users.forEach(u => {
-        const option = document.createElement('option');
-        option.value = u.username;
-        option.textContent = u.username;
-        unlock_username_select.appendChild(option);
-      });
-    } else if (all_users.length === 1 && unlock_username_select) {
-      // single user: pre-fill but hide the dropdown
-      unlock_username_select.value = all_users[0].username;
-    }
+    await refresh_unlock_user_list();
 
     setTimeout(() => unlock_password.focus(), 100);
     unlock_password.addEventListener('keydown', (e) => { if (e.key === 'Enter') unlock_button.click(); });
 
     unlock_button.addEventListener('click', async () => {
-          const username = all_users.length === 1
-            ? all_users[0].username
+          const current_users = await get_all_users();
+          const username = current_users.length === 1
+            ? current_users[0].username
             : unlock_username_select.value;
           const password = unlock_password.value;
           unlock_error.classList.add('hidden');
@@ -308,6 +308,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               ? 'WebAuthn cancelled'
               : 'Invalid username or password';
             unlock_error.classList.remove('hidden');
+          } finally {
             unlock_button.disabled = false;
             unlock_button.textContent = 'Unlock';
           }
@@ -535,12 +536,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       locked_view.classList.remove('hidden');
       unlock_view.classList.remove('hidden');
       unlock_password.value = '';
-      refresh_unlock_user_list();
+      unlock_button.disabled = false;
+      unlock_button.textContent = 'Unlock';
+      await refresh_unlock_user_list();
     });
   }
 
   // listen for auto-lock or lock events from the service worker
-  chrome.runtime.onMessage.addListener((message) => {
+  chrome.runtime.onMessage.addListener(async (message) => {
     if (message.type === 'aegis:locked') {
       // switch back to locked view if currently unlocked
       if (!unlocked_view.classList.contains('hidden')) {
@@ -548,7 +551,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         locked_view.classList.remove('hidden');
         unlock_view.classList.remove('hidden');
         unlock_password.value = '';
-        refresh_unlock_user_list();
+        unlock_button.disabled = false;
+        unlock_button.textContent = 'Unlock';
+        await refresh_unlock_user_list();
       }
     }
   });
