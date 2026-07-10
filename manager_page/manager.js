@@ -1956,26 +1956,27 @@ async function handle_change_password() {
       : null;
 
     for (const group of groups) {
-      let plaintext;
+      let plaintext = null;
       try {
         plaintext = await decrypt(
           { iv: group.iv, ciphertext: group.ciphertext }, old_key
         );
       } catch (err) {
         if (fallback_key) {
-          plaintext = await decrypt(
-            { iv: group.iv, ciphertext: group.ciphertext }, fallback_key
-          );
-        } else {
-          throw err;
+          try {
+            plaintext = await decrypt(
+              { iv: group.iv, ciphertext: group.ciphertext }, fallback_key
+            );
+          } catch (_) {}
         }
       }
-      const re_encrypted = await encrypt(plaintext, new_key);
-      group.iv = re_encrypted.iv;
-      group.ciphertext = re_encrypted.ciphertext;
-      reencrypted++;
+      if (plaintext !== null) {
+        const re_encrypted = await encrypt(plaintext, new_key);
+        group.iv = re_encrypted.iv;
+        group.ciphertext = re_encrypted.ciphertext;
+        reencrypted++;
+      }
     }
-    // every group re-encrypted successfully — safe to write the new groups
     await save_tab_groups(active_username, groups);
     progress_el.textContent = `Re-encrypted ${reencrypted} group(s).`;
 
@@ -1984,12 +1985,9 @@ async function handle_change_password() {
     try {
       const model = await load_model(active_username, old_key);
       if (model) {
-        // save_model calls JSON.stringify internally, so pass the object
         await save_model(active_username, model, new_key);
       }
-    } catch (_) {
-      // model re-encryption is best-effort — don't block the password change
-    }
+    } catch (_) {}
 
     // 5. update the user record with new salt, verifier, and iterations
     user.password_salt = array_buffer_to_base64(new_salt);
@@ -2004,11 +2002,12 @@ async function handle_change_password() {
     btn.textContent = 'Done';
     show_toast('Password changed. All data re-encrypted.', 'success');
 
-    // auto-close after a brief delay
+    // auto-close after a brief delay and refresh UI cleanly
     setTimeout(() => {
       close_change_password_modal();
       btn.disabled = false;
       btn.textContent = 'Change Password';
+      location.reload();
     }, 1500);
   } catch (error) {
     error_el.textContent = error.message === 'Wrong password'
