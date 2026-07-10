@@ -1792,47 +1792,69 @@ async function handle_delete_confirm() {
 
       const overlay = document.createElement('div');
       overlay.id = 'light-pw-prompt';
-      overlay.className = 'modal-overlay';
+      overlay.className = 'modal'; // Uses fixed full-screen centered overlay
       overlay.addEventListener('click', (e) => {
         if (e.target === overlay) { overlay.remove(); resolve(null); }
       });
 
       const box = document.createElement('div');
-      box.className = 'modal-box';
-      box.style.maxWidth = '360px';
+      box.className = 'card';
+      box.style.width = '90%';
+      box.style.maxWidth = '380px';
+      box.style.padding = '24px';
+      box.style.position = 'relative';
+      box.style.zIndex = '1002';
+      box.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.6)';
 
-      const title_el = document.createElement('p');
+      const title_el = document.createElement('h3');
       title_el.textContent = message;
-      title_el.style.marginBottom = '12px';
+      title_el.style.marginBottom = '16px';
+      title_el.style.fontSize = '16px';
 
       const input = document.createElement('input');
       input.type = 'password';
-      input.className = 'manager-input';
       input.style.width = '100%';
+      input.style.padding = '10px 14px';
+      input.style.borderRadius = '6px';
+      input.style.border = '1px solid var(--bg-tertiary)';
+      input.style.backgroundColor = 'var(--bg-secondary)';
+      input.style.color = 'var(--text-primary)';
       input.style.boxSizing = 'border-box';
       input.placeholder = 'Password';
       setTimeout(() => input.focus(), 50);
 
       const buttons = document.createElement('div');
       buttons.style.display = 'flex';
-      buttons.style.gap = '8px';
-      buttons.style.marginTop = '12px';
+      buttons.style.gap = '10px';
+      buttons.style.justifyContent = 'flex-end';
+      buttons.style.marginTop = '20px';
 
       const cancel = document.createElement('button');
-      cancel.className = 'manager-button secondary';
       cancel.textContent = 'Cancel';
+      cancel.style.padding = '8px 18px';
+      cancel.style.borderRadius = '6px';
+      cancel.style.border = 'none';
+      cancel.style.backgroundColor = 'var(--bg-tertiary)';
+      cancel.style.color = 'var(--text-primary)';
+      cancel.style.fontWeight = '600';
+      cancel.style.cursor = 'pointer';
       cancel.addEventListener('click', () => { overlay.remove(); resolve(null); });
 
       const ok = document.createElement('button');
-      ok.className = 'manager-button';
       ok.textContent = 'Confirm';
+      ok.style.padding = '8px 18px';
+      ok.style.borderRadius = '6px';
+      ok.style.border = 'none';
+      ok.style.backgroundColor = 'var(--accent)';
+      ok.style.color = '#ffffff';
+      ok.style.fontWeight = '600';
+      ok.style.cursor = 'pointer';
       ok.addEventListener('click', () => {
         const val = input.value;
         overlay.remove();
         resolve(val || null);
       });
 
-      // Enter key submits, Escape cancels
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { overlay.remove(); resolve(input.value || null); }
         if (e.key === 'Escape') { overlay.remove(); resolve(null); }
