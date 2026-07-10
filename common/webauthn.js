@@ -146,7 +146,10 @@ export function make_registration_options(challenge_b64, rp_name = 'Aegis Tab') 
       name: rp_id,
       displayName: rp_name
     },
-    pubKeyCredParams: [{ type: 'public-key', alg: -7 }], // ES256 only
+    pubKeyCredParams: [
+      { type: 'public-key', alg: -7 },   // ES256 (ECDSA P-256)
+      { type: 'public-key', alg: -257 }  // RS256 (RSASSA-PKCS1-v1_5 w/ SHA-256)
+    ],
     authenticatorSelection: {
       userVerification: 'required',
     },

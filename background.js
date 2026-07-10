@@ -399,7 +399,7 @@ function create_context_menu() {
       id: 'aegis-save-current-tab',
       title: 'Save to Aegis Tab',
       contexts: ['page', 'link']
-    });
+    }, () => chrome.runtime.lastError);
   });
 }
 
