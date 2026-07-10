@@ -1963,6 +1963,7 @@ async function handle_change_password() {
       ? await derive_key_from_password(current_pw, old_salt, OLD_ITERATIONS)
       : null;
     const active_session_key = await get_session_key();
+    console.log(`[Aegis Re-encrypt] Starting re-encryption of ${groups.length} tab group(s)...`);
     for (const group of groups) {
       let plaintext = null;
       if (active_session_key) {
@@ -1991,6 +1992,9 @@ async function handle_change_password() {
         group.iv = re_encrypted.iv;
         group.ciphertext = re_encrypted.ciphertext;
         reencrypted++;
+        console.log(`[Aegis Re-encrypt] Group ${group.id} successfully re-encrypted under new password.`);
+      } else {
+        console.warn(`[Aegis Re-encrypt] Group ${group.id} could not be decrypted under any account key (already unreadable). Skipping.`);
       }
     }
     await save_tab_groups(active_username, groups);
