@@ -372,7 +372,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     shortcuts_modal.addEventListener('click', (e) => {
       if (e.target === shortcuts_modal) shortcuts_modal.classList.add('hidden');
     });
-  }
+  // auto-lock activity heartbeat: reset countdown on user activity (max once per 30s)
+  let last_ping = 0;
+  const ping_auto_lock = () => {
+    const now = Date.now();
+    if (now - last_ping > 30000) {
+      last_ping = now;
+      chrome.runtime.sendMessage({ type: 'aegis:reset-timer' }).catch(() => {});
+    }
+  };
+  window.addEventListener('click', ping_auto_lock, { passive: true });
+  window.addEventListener('keydown', ping_auto_lock, { passive: true });
 
   const session_key = await get_session_key();
   const session_user = await get_session_user();
