@@ -89,13 +89,23 @@ export async function decrypt(encrypted_package, key) {
   const iv = base64_to_array_buffer(encrypted_package.iv);
   const ciphertext = base64_to_array_buffer(encrypted_package.ciphertext);
 
-  const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: iv },
-    key,
-    ciphertext
-  );
-
-  return decoder.decode(decrypted);
+  try {
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: iv },
+      key,
+      ciphertext
+    );
+    return decoder.decode(decrypted);
+  } catch (err) {
+    console.error(`[Aegis Decryption Error] Failed to decrypt package:`, {
+      error_name: err.name,
+      error_message: err.message,
+      iv_bytes: iv.byteLength,
+      ciphertext_bytes: ciphertext.byteLength,
+      key_algo: key?.algorithm?.name
+    });
+    throw err;
+  }
 }
 
 // export a CryptoKey to raw ArrayBuffer for storage

@@ -1381,7 +1381,15 @@ async function render_page(key) {
         id: group.id,
         data: JSON.parse(plaintext),
         error: null
-      })).catch(() => ({ id: group.id, data: null, error: true }))
+      })).catch((err) => {
+        console.error(`[Aegis Diagnostic] Group ID ${group.id} could not be decrypted under key algorithm ${key?.algorithm?.name}:`, err);
+        return {
+          id: group.id,
+          data: null,
+          error: true,
+          err_message: err?.message || 'AES-GCM authentication tag mismatch'
+        };
+      })
     );
 
     const decrypted_results = await Promise.all(decrypt_promises);
@@ -1422,7 +1430,7 @@ async function render_page(key) {
     let group_index = 0;
     for (const result of decrypted_results) {
       if (result.error) {
-        groups_container.appendChild(create_corrupted_group_element(result.id));
+        groups_container.appendChild(create_corrupted_group_element(result.id, result.err_message));
         continue;
       }
       groups_container.appendChild(
@@ -2371,7 +2379,7 @@ function create_group_element(group_id, group_data, group_index = 0) {
 // render a diagnostic card for a group whose ciphertext could not be decrypted.
 // shows the raw group id, a warning message, and a delete button — the only
 // useful action for ciphertext that can never be decrypted.
-function create_corrupted_group_element(group_id) {
+function create_corrupted_group_element(group_id, err_message = 'AES-GCM authentication tag mismatch') {
   const group_element = document.createElement('div');
   group_element.className = 'group-card group-card-corrupted';
   group_element.dataset.groupId = group_id;
@@ -2385,7 +2393,7 @@ function create_corrupted_group_element(group_id) {
 
   const subtitle = document.createElement('p');
   subtitle.className = 'corrupted-subtitle';
-  subtitle.textContent = `The encrypted data for this group (id: ${group_id.slice(0, 8)}…) could not be decrypted. It may be corrupted.`;
+  subtitle.textContent = `The encrypted data for this group (id: ${group_id.slice(0, 8)}…) could not be decrypted under your current account key (${err_message}). Likely saved during earlier testing under a previous password. Click 'Delete Group' below to clean up this leftover test entry.`;
 
   const actions_div = document.createElement('div');
   actions_div.className = 'group-actions';
