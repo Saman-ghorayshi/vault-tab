@@ -1954,21 +1954,29 @@ async function handle_change_password() {
     const fallback_key = (old_iterations !== OLD_ITERATIONS)
       ? await derive_key_from_password(current_pw, old_salt, OLD_ITERATIONS)
       : null;
-
+    const active_session_key = await get_session_key();
     for (const group of groups) {
       let plaintext = null;
-      try {
-        plaintext = await decrypt(
-          { iv: group.iv, ciphertext: group.ciphertext }, old_key
-        );
-      } catch (err) {
-        if (fallback_key) {
-          try {
-            plaintext = await decrypt(
-              { iv: group.iv, ciphertext: group.ciphertext }, fallback_key
-            );
-          } catch (_) {}
-        }
+      if (active_session_key) {
+        try {
+          plaintext = await decrypt(
+            { iv: group.iv, ciphertext: group.ciphertext }, active_session_key
+          );
+        } catch (_) {}
+      }
+      if (plaintext === null) {
+        try {
+          plaintext = await decrypt(
+            { iv: group.iv, ciphertext: group.ciphertext }, old_key
+          );
+        } catch (_) {}
+      }
+      if (plaintext === null && fallback_key) {
+        try {
+          plaintext = await decrypt(
+            { iv: group.iv, ciphertext: group.ciphertext }, fallback_key
+          );
+        } catch (_) {}
       }
       if (plaintext !== null) {
         const re_encrypted = await encrypt(plaintext, new_key);
