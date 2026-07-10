@@ -2009,11 +2009,12 @@ async function handle_change_password() {
       }
     } catch (_) {}
 
-    // 5. update the user record with new salt, verifier, and iterations
-    user.password_salt = array_buffer_to_base64(new_salt);
-    user.password_verifier = new_verifier;
-    user.password_iterations = CURRENT_ITERATIONS;
-    await save_user(user);
+    // 5. fetch fresh user record so we don't clobber newly saved tab_groups
+    const fresh_user = await get_user_by_username(active_username);
+    fresh_user.password_salt = array_buffer_to_base64(new_salt);
+    fresh_user.password_verifier = new_verifier;
+    fresh_user.password_iterations = CURRENT_ITERATIONS;
+    await save_user(fresh_user);
 
     // 6. update the session key so the user stays logged in
     await store_session_key(new_key);
