@@ -372,6 +372,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     shortcuts_modal.addEventListener('click', (e) => {
       if (e.target === shortcuts_modal) shortcuts_modal.classList.add('hidden');
     });
+  }
+
   // auto-lock activity heartbeat: reset countdown on user activity (max once per 30s)
   let last_ping = 0;
   const ping_auto_lock = () => {
