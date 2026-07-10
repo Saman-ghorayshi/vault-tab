@@ -90,6 +90,20 @@ A Chrome extension that securely saves, manages, and restores browser tabs using
 
 ## Architecture
 
+```mermaid
+graph TD
+    A["Master Password"] -->|PBKDF2-HMAC-SHA256 (600,000 iterations)| B["AES-256-GCM Derived Key"]
+    B -->|Verify against password_verifier| C{"Verification Successful?"}
+    C -->|Yes| D["Store Session Key in chrome.storage.session (RAM only)"]
+    C -->|No| E["Deny Unlock"]
+    
+    D -->|Optional 2FA| F["WebAuthn Passkey Challenge (ECDSA / RS256)"]
+    F -->|Hardware Authenticator Signs| G["Unlocked Session Active"]
+    
+    G -->|Encrypt / Decrypt| H["Tab Groups JSON & Neural Model"]
+    H -->|AES-256-GCM Ciphertext + IV| I["chrome.storage.local / IndexedDB"]
+```
+
 ```
 aegis-tab/
 ├── manifest.json          # MV3 manifest (v2.3.0)
@@ -156,14 +170,17 @@ All matrix math uses flat typed arrays (Float32Array) to minimize garbage collec
 No build step required. The extension runs directly from source using ES modules.
 
 ```bash
-# run the full test suite
+# run the automated test suites (Cryptography, WebAuthn, Embedder)
+npm test
+# or run individually
+node --test tests/*.test.js
 node --test test_crypto.mjs
 node --test test_embedder.mjs
 node --test test_phase5.mjs
 node test_cose_parse.mjs
 ```
 
-CI runs all 4 test suites on Node 18/20/22 via GitHub Actions on every push and pull request.
+CI runs all test suites on Node 18/20/22 via GitHub Actions on every push and pull request.
 
 ## Tech stack
 

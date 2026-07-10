@@ -97,7 +97,6 @@ export async function decrypt(encrypted_package, key) {
     );
     return decoder.decode(decrypted);
   } catch (err) {
-    console.error(`[Aegis Decryption Error] AES-GCM decryption failed (${err.name}: ${err.message}). IV=${iv.byteLength}B, Ciphertext=${ciphertext.byteLength}B.`);
     throw err;
   }
 }

@@ -388,7 +388,7 @@ export function serialize_assertion(assertion) {
 
 // convert ASN.1 DER ECDSA signature (returned by navigator.credentials.get)
 // into IEEE P1363 raw signature (64 bytes for P-256) required by Web Crypto API
-function der_to_raw_ecdsa_signature(sig_buffer) {
+export function der_to_raw_ecdsa_signature(sig_buffer) {
   const bytes = new Uint8Array(sig_buffer);
   if (bytes.length === 64 || bytes[0] !== 0x30) return sig_buffer;
 

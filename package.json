@@ -1,0 +1,20 @@
+{
+  "name": "aegis-tab",
+  "version": "1.0.0",
+  "description": "Zero-Knowledge, privacy-first browser tab manager for Manifest V3 featuring AES-256-GCM encryption, hardware WebAuthn passkeys, and on-device semantic clustering.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  },
+  "keywords": [
+    "chrome-extension",
+    "zero-knowledge",
+    "encryption",
+    "aes-gcm",
+    "webauthn",
+    "passkeys",
+    "tab-manager"
+  ],
+  "author": "Aegis Tab Team",
+  "license": "MIT"
+}
