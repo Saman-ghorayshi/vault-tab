@@ -1382,7 +1382,7 @@ async function render_page(key) {
         data: JSON.parse(plaintext),
         error: null
       })).catch((err) => {
-        console.error(`[Aegis Diagnostic] Group ID ${group.id} could not be decrypted under key algorithm ${key?.algorithm?.name}:`, err);
+        console.error(`[Aegis Diagnostic] Group ID ${group.id} could not be decrypted (${err?.name || 'Error'}: ${err?.message || 'AES-GCM tag mismatch'}).`);
         return {
           id: group.id,
           data: null,
