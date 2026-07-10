@@ -112,7 +112,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             return;
           }
 
-          // silent iteration upgrade
+          // silent iteration upgrade & auto-heal legacy tab groups
+          let active_key = key;
           if (iterations < CURRENT_ITERATIONS) {
             try {
               const new_key = await derive_key_from_password(message.password, salt, CURRENT_ITERATIONS);
@@ -120,15 +121,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               user.password_verifier = new_verifier;
               user.password_iterations = CURRENT_ITERATIONS;
               await save_user(user);
-              // stash the derived key for either immediate use or
-              // the webauthn second-factor pending phase
-              pending_unlock = { username: message.username, key: new_key };
-            } catch (_) {
-              pending_unlock = { username: message.username, key };
-            }
-          } else {
-            pending_unlock = { username: message.username, key };
+              active_key = new_key;
+            } catch (_) {}
           }
+
+          // ensure all tab groups are encrypted under active_key
+          try {
+            const groups = await get_tab_groups(user.username);
+            let modified = false;
+            let legacy_key = null;
+            for (const group of groups) {
+              try {
+                await decrypt({ iv: group.iv, ciphertext: group.ciphertext }, active_key);
+              } catch (_) {
+                if (!legacy_key) {
+                  legacy_key = (active_key === key)
+                    ? await derive_key_from_password(message.password, salt, OLD_ITERATIONS)
+                    : key;
+                }
+                try {
+                  const pt = await decrypt({ iv: group.iv, ciphertext: group.ciphertext }, legacy_key);
+                  const re = await encrypt(pt, active_key);
+                  group.iv = re.iv;
+                  group.ciphertext = re.ciphertext;
+                  modified = true;
+                } catch (_) {}
+              }
+            }
+            if (modified) {
+              await save_tab_groups(user.username, groups);
+            }
+          } catch (_) {}
+
+          pending_unlock = { username: message.username, key: active_key };
 
           // if this user has a registered passkey, send a webauthn challenge
           // instead of finishing unlock immediately.

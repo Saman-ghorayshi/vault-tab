@@ -1929,10 +1929,25 @@ async function handle_change_password() {
     progress_el.textContent = 'Re-encrypting tab groups...';
     const groups = await get_tab_groups(active_username);
     let reencrypted = 0;
+    const fallback_key = (old_iterations !== OLD_ITERATIONS)
+      ? await derive_key_from_password(current_pw, old_salt, OLD_ITERATIONS)
+      : null;
+
     for (const group of groups) {
-      const plaintext = await decrypt(
-        { iv: group.iv, ciphertext: group.ciphertext }, old_key
-      );
+      let plaintext;
+      try {
+        plaintext = await decrypt(
+          { iv: group.iv, ciphertext: group.ciphertext }, old_key
+        );
+      } catch (err) {
+        if (fallback_key) {
+          plaintext = await decrypt(
+            { iv: group.iv, ciphertext: group.ciphertext }, fallback_key
+          );
+        } else {
+          throw err;
+        }
+      }
       const re_encrypted = await encrypt(plaintext, new_key);
       group.iv = re_encrypted.iv;
       group.ciphertext = re_encrypted.ciphertext;
