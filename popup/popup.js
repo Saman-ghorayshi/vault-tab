@@ -306,8 +306,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             unlocked_view.classList.remove('hidden');
             if (current_user_label) current_user_label.textContent = username;
           } catch (error) {
-            unlock_error.textContent = error.message === 'Passkey cancelled'
-              ? 'WebAuthn cancelled'
+            unlock_error.textContent = error.message && error.message !== 'Unlock failed'
+              ? (error.message === 'Passkey cancelled' ? 'WebAuthn cancelled' : error.message)
               : 'Invalid username or password';
             unlock_error.classList.remove('hidden');
           } finally {

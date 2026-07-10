@@ -486,7 +486,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (user_label) user_label.textContent = username;
       render_page(key);
     } catch (error) {
-      manager_error.textContent = 'Invalid username or password';
+      manager_error.textContent = error.message && error.message !== 'Unlock failed'
+        ? error.message
+        : 'Invalid username or password';
       manager_error.classList.remove('hidden');
     } finally {
       manager_unlock_button.disabled = false;

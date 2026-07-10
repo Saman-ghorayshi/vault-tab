@@ -386,6 +386,40 @@ export function serialize_assertion(assertion) {
   };
 }
 
+// convert ASN.1 DER ECDSA signature (returned by navigator.credentials.get)
+// into IEEE P1363 raw signature (64 bytes for P-256) required by Web Crypto API
+function der_to_raw_ecdsa_signature(sig_buffer) {
+  const bytes = new Uint8Array(sig_buffer);
+  if (bytes.length === 64 || bytes[0] !== 0x30) return sig_buffer;
+
+  try {
+    let offset = 1;
+    let seq_len = bytes[offset++];
+    if (seq_len & 0x80) {
+      const len_bytes = seq_len & 0x7f;
+      offset += len_bytes;
+    }
+    if (bytes[offset++] !== 0x02) return sig_buffer;
+    let r_len = bytes[offset++];
+    let r = bytes.subarray(offset, offset + r_len);
+    offset += r_len;
+
+    if (bytes[offset++] !== 0x02) return sig_buffer;
+    let s_len = bytes[offset++];
+    let s = bytes.subarray(offset, offset + s_len);
+
+    if (r.length > 32) r = r.subarray(r.length - 32);
+    if (s.length > 32) s = s.subarray(s.length - 32);
+
+    const raw = new Uint8Array(64);
+    raw.set(r, 32 - r.length);
+    raw.set(s, 64 - s.length);
+    return raw.buffer;
+  } catch (_) {
+    return sig_buffer;
+  }
+}
+
 // verify a WebAuthn assertion in the service worker.
 // credential_public_key_cbor: the CBOR-encoded COSE key stored during registration
 //   (base64url-encoded string, as returned by serialize_credential).
@@ -434,12 +468,12 @@ export async function verify_assertion(
 
     // 3. parse the COSE public key and verify
     const public_key = await cose_key_to_cryptokey(cose_key_bytes);
-    const signature = base64url_to_array_buffer(assertion.signature);
+    const raw_signature = der_to_raw_ecdsa_signature(base64url_to_array_buffer(assertion.signature));
 
     return crypto.subtle.verify(
       { name: 'ECDSA', hash: 'SHA-256' },
       public_key,
-      signature,
+      raw_signature,
       signed_data
     );
   } catch (_) {
