@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Aegis Tab",
+  "name": "VaultTab — Secure & Encrypted Tab Manager",
   "version": "2.3.0",
-  "description": "Securely save and manage your browser tabs with zero-knowledge AES-256 encryption.",
+  "description": "Securely save, organize, and search your browser tabs with Zero-Knowledge AES-256-GCM encryption, WebAuthn passkeys, and on-device AI.",
   "permissions": [
     "storage",
     "unlimitedStorage",
@@ -38,14 +38,14 @@
         "default": "Ctrl+Shift+S",
         "mac": "Command+Shift+S"
       },
-      "description": "Save current tab to Aegis Tab"
+      "description": "Save current tab to VaultTab"
     },
     "save_all_tabs": {
       "suggested_key": {
         "default": "Alt+Shift+S",
         "mac": "Alt+Shift+S"
       },
-      "description": "Save all tabs in window to Aegis Tab"
+      "description": "Save all tabs in window to VaultTab"
     }
   }
 }

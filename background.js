@@ -397,7 +397,7 @@ function create_context_menu() {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: 'aegis-save-current-tab',
-      title: 'Save to Aegis Tab',
+      title: 'Save to VaultTab',
       contexts: ['page', 'link']
     }, () => chrome.runtime.lastError);
   });

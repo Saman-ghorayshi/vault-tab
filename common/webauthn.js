@@ -132,8 +132,8 @@ export function generate_challenge() {
 }
 
 // build the PublicKeyCredentialCreationOptions for registering a passkey.
-// rp_name is shown to the user (e.g. "Aegis Tab").
-export function make_registration_options(challenge_b64, rp_name = 'Aegis Tab') {
+// rp_name is shown to the user (e.g. "VaultTab").
+export function make_registration_options(challenge_b64, rp_name = 'VaultTab') {
   const challenge = base64url_to_array_buffer(challenge_b64);
   const rp_id = chrome.runtime.id;
   const user_id = crypto.getRandomValues(new Uint8Array(16));

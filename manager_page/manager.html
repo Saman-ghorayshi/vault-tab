@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Aegis Tab Manager</title>
+  <title>VaultTab Manager</title>
   <link rel="stylesheet" href="manager.css">
 </head>
 <body>
@@ -16,7 +16,7 @@
 
     <header>
       <div class="header-title">
-        <h1>Aegis Tab Manager</h1>
+        <h1>VaultTab Manager</h1>
         <span id="current-user-display" class="current-user-display"></span>
       </div>
       <div class="header-actions">
@@ -26,7 +26,7 @@
           <span>Semantic</span>
         </label>
         <input type="file" id="import-file" accept=".txt" style="display: none;">
-        <input type="file" id="import-backup-file" accept=".aegis" style="display: none;">
+        <input type="file" id="import-backup-file" accept=".vaulttab,.aegis" style="display: none;">
         <button id="import-button" class="secondary-button">Import URLs</button>
         <button id="export-backup-button" class="secondary-button">Export Backup</button>
         <button id="import-backup-button" class="secondary-button">Import Backup</button>
@@ -74,7 +74,7 @@
 
     <div id="password-prompt-view" class="hidden">
       <div class="card">
-        <h2>Unlock Aegis Tab</h2>
+        <h2>Unlock VaultTab</h2>
         <div id="manager-username-wrapper" class="form-group hidden">
           <select id="manager-username-select" class="username-select">
             <option value="">Select user...</option>
@@ -261,8 +261,8 @@
             <tr><td><kbd>Esc</kbd></td><td>Clear selection / close modal</td></tr>
             <tr><td><kbd>?</kbd></td><td>Open this shortcuts guide</td></tr>
             <tr class="shortcuts-section-row"><td colspan="2"><strong>Global Browser Shortcuts (any webpage)</strong></td></tr>
-            <tr><td><kbd>Ctrl+Shift+S</kbd> (<kbd>Cmd+Shift+S</kbd>)</td><td>Save current tab to Aegis Tab</td></tr>
-            <tr><td><kbd>Alt+Shift+S</kbd></td><td>Save all tabs in window to Aegis Tab</td></tr>
+            <tr><td><kbd>Ctrl+Shift+S</kbd> (<kbd>Cmd+Shift+S</kbd>)</td><td>Save current tab to VaultTab</td></tr>
+            <tr><td><kbd>Alt+Shift+S</kbd></td><td>Save all tabs in window to VaultTab</td></tr>
           </tbody>
         </table>
         <p class="shortcuts-tip">You can also customize your global shortcuts anytime in Chrome at <code>chrome://extensions/shortcuts</code>.</p>

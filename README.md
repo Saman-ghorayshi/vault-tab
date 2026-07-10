@@ -1,6 +1,6 @@
-# Aegis Tab
+# VaultTab — Secure & Encrypted Tab Manager
 
-A Chrome extension that securely saves, manages, and restores browser tabs using zero-knowledge AES-256-GCM encryption. No server, no cloud, no tracking — your tab data never leaves your browser.
+A Chrome extension that securely saves, organizes, and restores browser tabs using Zero-Knowledge AES-256-GCM encryption, WebAuthn passkeys, and on-device AI. No server, no cloud, no tracking — your tab data never leaves your browser.
 
 ## Features
 
@@ -10,7 +10,7 @@ A Chrome extension that securely saves, manages, and restores browser tabs using
 - **On-device AI summaries** — Uses Chrome's built-in Prompt API (Gemini Nano) to generate one-line summaries of saved tab groups. Runs entirely on-device — no network call. Gracefully hidden when unavailable.
 - **Neural embedding engine** — A from-scratch Word2Vec Skip-gram neural network (no libraries) that learns custom embeddings on your tab data. Provides semantic search, K-Means clustering, and a live training analytics panel with loss visualization.
 - **Auto-lock** — Automatically locks the vault after inactivity. Configurable: off, 5, 10, 15, 30, or 60 minutes. Works even if only the popup is open — the service worker owns the timer via `chrome.alarms`.
-- **Encrypted backup** — Export all sessions as a `.aegis` file. Import on a fresh install — the backup includes credentials so the original password still works.
+- **Encrypted backup** — Export all sessions as a `.vaulttab` (or `.aegis`) file. Import on a fresh install — the backup includes credentials so the original password still works.
 - **Semantic search** — Toggle between plain text search and meaning-based search powered by the trained embedder.
 - **Keyboard shortcuts** — Vim-style navigation (J/K), Gmail-style selection (X), slash to search, and more.
 - **Drag-and-drop reordering** — Reorder tabs within a group. Changes persist to encrypted storage immediately.
@@ -21,12 +21,12 @@ A Chrome extension that securely saves, manages, and restores browser tabs using
 
 1. Clone this repository:
    ```
-   git clone https://github.com/YOUR_USERNAME/aegis-tab.git
+   git clone https://github.com/YOUR_USERNAME/vaulttab.git
    ```
 2. Open Chrome and go to `chrome://extensions/`
 3. Enable **Developer mode** (top right)
 4. Click **Load unpacked** and select the project folder
-5. The Aegis Tab icon will appear in your toolbar
+5. The VaultTab icon will appear in your toolbar
 
 ## Usage
 
@@ -42,7 +42,7 @@ A Chrome extension that securely saves, manages, and restores browser tabs using
   - *(Shortcuts can be customized anytime in Chrome at `chrome://extensions/shortcuts`)*
 - **Save All Tabs button** — Encrypts and saves all tabs in the current window, then closes them
 - **Save This Tab button** — Saves only the currently active tab
-- **Right-click > Save to Aegis Tab** — Save the current page or a link via context menu
+- **Right-click > Save to VaultTab** — Save the current page or a link via context menu
 
 ### Managing tabs & Accounts
 - Create multiple isolated user accounts (`+ Add Account`) and switch between them cleanly from the lock screen dropdown
@@ -60,8 +60,8 @@ A Chrome extension that securely saves, manages, and restores browser tabs using
 #### Global Browser Shortcuts (any webpage)
 | Key | Action |
 |-----|--------|
-| <kbd>Ctrl+Shift+S</kbd> (<kbd>Cmd+Shift+S</kbd>) | Save current tab to Aegis Tab |
-| <kbd>Alt+Shift+S</kbd> | Save all tabs in window to Aegis Tab |
+| <kbd>Ctrl+Shift+S</kbd> (<kbd>Cmd+Shift+S</kbd>) | Save current tab to VaultTab |
+| <kbd>Alt+Shift+S</kbd> | Save all tabs in window to VaultTab |
 
 #### Manager Page Navigation
 | Key | Action |

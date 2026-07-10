@@ -173,7 +173,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // build the backup object with metadata and credentials
         const backup_data = {
-          format: 'aegis-backup',
+          format: 'vaulttab-backup',
           version: 1,
           exported_at: new Date().toISOString(),
           exported_by: active_username,
@@ -189,7 +189,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `aegis-backup-${new Date().toISOString().split('T')[0]}.aegis`;
+        a.download = `vaulttab-backup-${new Date().toISOString().split('T')[0]}.vaulttab`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -200,7 +200,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // import a .aegis backup file and merge groups into storage
+  // import a .vaulttab or .aegis backup file and merge groups into storage
   const import_backup_button = document.getElementById('import-backup-button');
   const import_backup_file = document.getElementById('import-backup-file');
   if (import_backup_button && import_backup_file) {
@@ -213,8 +213,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const text = await file.text();
         const backup_data = JSON.parse(text);
 
-        if (!backup_data.format || backup_data.format !== 'aegis-backup') {
-          show_toast('This is not a valid Aegis Tab backup file.', 'error');
+        if (!backup_data.format || (backup_data.format !== 'vaulttab-backup' && backup_data.format !== 'aegis-backup')) {
+          show_toast('This is not a valid VaultTab backup file.', 'error');
           import_backup_file.value = '';
           return;
         }
