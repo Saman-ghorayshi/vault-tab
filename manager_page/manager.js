@@ -1800,7 +1800,16 @@ async function handle_delete_confirm() {
 
       const overlay = document.createElement('div');
       overlay.id = 'light-pw-prompt';
-      overlay.className = 'modal'; // Uses fixed full-screen centered overlay
+      overlay.style.position = 'fixed';
+      overlay.style.top = '0';
+      overlay.style.left = '0';
+      overlay.style.width = '100vw';
+      overlay.style.height = '100vh';
+      overlay.style.display = 'flex';
+      overlay.style.justifyContent = 'center';
+      overlay.style.alignItems = 'center';
+      overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.75)';
+      overlay.style.zIndex = '999999';
       overlay.addEventListener('click', (e) => {
         if (e.target === overlay) { overlay.remove(); resolve(null); }
       });
@@ -1810,8 +1819,9 @@ async function handle_delete_confirm() {
       box.style.width = '90%';
       box.style.maxWidth = '380px';
       box.style.padding = '24px';
+      box.style.margin = 'auto';
       box.style.position = 'relative';
-      box.style.zIndex = '1002';
+      box.style.zIndex = '1000000';
       box.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.6)';
 
       const title_el = document.createElement('h3');
