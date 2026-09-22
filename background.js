@@ -19,6 +19,42 @@ import { generate_challenge, verify_assertion, make_registration_options } from 
 
 const VERIFIER_STRING = 'aegis-verification-string';
 
+// --- Centralized Write Queue ---
+// Prevents cross-context race conditions between popup, manager, and background shortcuts
+class AsyncMutex {
+  constructor() {
+    this.queue = [];
+    this.locked = false;
+  }
+  async lock() {
+    return new Promise(resolve => {
+      this.queue.push(resolve);
+      this.dispatch();
+    });
+  }
+  dispatch() {
+    if (this.locked || this.queue.length === 0) return;
+    this.locked = true;
+    this.queue.shift()(this.unlock.bind(this));
+  }
+  unlock() {
+    this.locked = false;
+    this.dispatch();
+  }
+}
+const storage_mutex = new AsyncMutex();
+
+async function safely_append_to_groups(username, new_group) {
+  const unlock = await storage_mutex.lock();
+  try {
+    const groups = await get_tab_groups(username);
+    groups.unshift(new_group);
+    await save_tab_groups(username, groups);
+  } finally {
+    unlock();
+  }
+}
+
 // --- pending unlock state ---
 // holds the derived key, username, and webauthn challenge between
 // password verification and passkey assertion. cleared on lock,
@@ -246,6 +282,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         chrome.runtime.sendMessage({ type: 'aegis:locked' }).catch(() => {});
         sendResponse({ ok: true });
         break;
+      }
+
+      case 'aegis:save-group': {
+        // Delegated saving via Mutex queue to prevent IPC cross-context race conditions
+        (async () => {
+          try {
+            await safely_append_to_groups(message.username, message.group);
+            sendResponse({ ok: true });
+          } catch (error) {
+            sendResponse({ ok: false, error: error.message });
+          }
+        })();
+        return true; // Keep channel open for async response
       }
 
       case 'aegis:refresh-timer': {
@@ -495,13 +544,11 @@ chrome.commands.onCommand.addListener(async (command) => {
       };
 
       const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
-      const groups = await get_tab_groups(session_user);
-      groups.unshift({
+      await safely_append_to_groups(session_user, {
         id: crypto.randomUUID(),
         iv: encrypted.iv,
         ciphertext: encrypted.ciphertext
       });
-      await save_tab_groups(session_user, groups);
       await show_in_page_toast(active_tab.id, '🛡️ Saved to Aegis Tab!');
     } else if (command === 'save_all_tabs') {
       const all_tabs = await chrome.tabs.query({ currentWindow: true }) || [];
@@ -536,13 +583,11 @@ chrome.commands.onCommand.addListener(async (command) => {
       };
 
       const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
-      const groups = await get_tab_groups(session_user);
-      groups.unshift({
+      await safely_append_to_groups(session_user, {
         id: crypto.randomUUID(),
         iv: encrypted.iv,
         ciphertext: encrypted.ciphertext
       });
-      await save_tab_groups(session_user, groups);
 
       const manager_tab = await chrome.tabs.create({ url: manager_url });
       const final_ids = tab_ids_to_remove.filter(id => id !== manager_tab.id);

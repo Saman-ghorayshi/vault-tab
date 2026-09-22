@@ -409,13 +409,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (suggested_name) tab_data.name = suggested_name;
 
       const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
-      const groups = await get_tab_groups(session_user);
-      groups.unshift({
+      const new_group = {
         id: crypto.randomUUID(),
         iv: encrypted.iv,
         ciphertext: encrypted.ciphertext
+      };
+      
+      const response = await chrome.runtime.sendMessage({
+        type: 'aegis:save-group',
+        username: session_user,
+        group: new_group
       });
-      await save_tab_groups(session_user, groups);
+      if (!response || !response.ok) {
+        throw new Error(response?.error || 'Failed to communicate with service worker');
+      }
 
       // open the manager page, then close the saved tabs
       const manager_tab = await chrome.tabs.create({ url: manager_url });
@@ -483,13 +490,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (suggested_name) tab_data.name = suggested_name;
 
       const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
-      const groups = await get_tab_groups(session_user);
-      groups.unshift({
+      const new_group = {
         id: crypto.randomUUID(),
         iv: encrypted.iv,
         ciphertext: encrypted.ciphertext
+      };
+      
+      const response = await chrome.runtime.sendMessage({
+        type: 'aegis:save-group',
+        username: session_user,
+        group: new_group
       });
-      await save_tab_groups(session_user, groups);
+      if (!response || !response.ok) {
+        throw new Error(response?.error || 'Failed to communicate with service worker');
+      }
 
       save_current_tab_button.textContent = 'Saved!';
       setTimeout(() => window.close(), 600);
