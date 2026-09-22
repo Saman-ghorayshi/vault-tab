@@ -19,12 +19,13 @@ import { generate_challenge, verify_assertion, make_registration_options } from 
 
 const VERIFIER_STRING = 'aegis-verification-string';
 
-// --- Centralized Write Queue ---
-// Prevents cross-context race conditions between popup, manager, and background shortcuts
+// --- Centralized Write Queue (Distributed Mutex with Dead Man's Switch) ---
+// Prevents cross-context race conditions and handles UI tab crashes
 class AsyncMutex {
   constructor() {
     this.queue = [];
     this.locked = false;
+    this.lease_timeout = null;
   }
   async lock() {
     return new Promise(resolve => {
@@ -35,9 +36,21 @@ class AsyncMutex {
   dispatch() {
     if (this.locked || this.queue.length === 0) return;
     this.locked = true;
+    
+    // Dead Man's Switch: If the client tab crashes or hangs, 
+    // force unlock after 5 seconds to prevent permanent deadlock
+    this.lease_timeout = setTimeout(() => {
+      console.warn("Mutex lease expired! Force unlocking to prevent deadlock.");
+      this.unlock();
+    }, 5000);
+    
     this.queue.shift()(this.unlock.bind(this));
   }
   unlock() {
+    if (this.lease_timeout) {
+      clearTimeout(this.lease_timeout);
+      this.lease_timeout = null;
+    }
     this.locked = false;
     this.dispatch();
   }
@@ -280,6 +293,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await cancel_auto_lock_timer();
         await clear_session_key();
         chrome.runtime.sendMessage({ type: 'aegis:locked' }).catch(() => {});
+        sendResponse({ ok: true });
+        break;
+      }
+
+      case 'aegis:acquire-lock': {
+        // the client MUST send aegis:release-lock or the 5s lease timeout will forcefully unlock it
+        storage_mutex.lock().then(unlock_fn => {
+          // store the global unlock function attached to the connection port?
+          // since we only allow one lock at a time, we can just store it directly on the mutex!
+          storage_mutex.current_unlock_fn = unlock_fn;
+          sendResponse({ ok: true });
+        });
+        return true;
+      }
+
+      case 'aegis:release-lock': {
+        if (storage_mutex.current_unlock_fn) {
+          storage_mutex.current_unlock_fn();
+          storage_mutex.current_unlock_fn = null;
+        }
         sendResponse({ ok: true });
         break;
       }

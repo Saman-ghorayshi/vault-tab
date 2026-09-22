@@ -316,9 +316,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // merge: load existing groups for the target user, then add backup groups
     // avoid duplicates by checking group ids
-    const existing_groups = await get_tab_groups(import_target);
-    const existing_ids = new Set(existing_groups.map(g => g.id));
-    let added_count = 0;
+    await acquire_distributed_lock();
+    try {
+      const existing_groups = await get_tab_groups(import_target);
+      const existing_ids = new Set(existing_groups.map(g => g.id));
+      let added_count = 0;
 
     for (const group of backup_data.groups) {
       if (!group || typeof group !== 'object' || !group.id || !group.iv || !group.ciphertext) {
@@ -332,11 +334,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
 
-    await save_tab_groups(import_target, existing_groups);
-    show_toast(`Imported ${added_count} group(s) from backup.`, 'success');
-    
-    // reload to decrypt the new state
-    setTimeout(() => location.reload(), 1500);
+      await save_tab_groups(import_target, existing_groups);
+      show_toast(`Imported ${added_count} group(s) from backup.`, 'success');
+      
+      // reload to decrypt the new state
+      setTimeout(() => location.reload(), 1500);
+    } finally {
+      await release_distributed_lock();
+    }
   }
 
   setup_paste_modal();
@@ -782,6 +787,17 @@ async function check_incognito_permission() {
   } catch (error) {
     // ignore
   }
+}
+
+// used to pause automatic rendering during drag-and-drop operations
+let is_reordering = false;
+
+// --- Distributed Mutex Lock (Anti TOC-TOU Race Conditions) ---
+async function acquire_distributed_lock() {
+  await chrome.runtime.sendMessage({ type: 'aegis:acquire-lock' });
+}
+async function release_distributed_lock() {
+  await chrome.runtime.sendMessage({ type: 'aegis:release-lock' });
 }
 
 async function load_settings() {
