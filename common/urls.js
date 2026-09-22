@@ -9,7 +9,10 @@ const UNSAVEABLE_SCHEMES = [
   'about:',
   'edge:',
   'brave:',
-  'devtools:'
+  'devtools:',
+  'javascript:',
+  'data:',
+  'vbscript:'
 ];
 
 // check if a URL is a local file path
