@@ -1,6 +1,6 @@
-import { Word2VecEmbedder } from './embedder.js';
+import { LocalTabEmbedder } from './embedder.js';
 
-let embedder = new Word2VecEmbedder();
+let embedder = new LocalTabEmbedder();
 
 self.onmessage = async (e) => {
   const { type, payload } = e.data;
@@ -12,7 +12,7 @@ self.onmessage = async (e) => {
     if (serialized_state) {
       embedder.deserialize(serialized_state);
     } else {
-      embedder = new Word2VecEmbedder(); // fresh embedder if no state
+      embedder = new LocalTabEmbedder(); // fresh embedder if no state
     }
 
     try {
