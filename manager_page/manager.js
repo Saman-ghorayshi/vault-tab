@@ -321,6 +321,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     let added_count = 0;
 
     for (const group of backup_data.groups) {
+      if (!group || typeof group !== 'object' || !group.id || !group.iv || !group.ciphertext) {
+        console.warn('Skipping malformed group in backup:', group);
+        continue;
+      }
+      
       if (!existing_ids.has(group.id)) {
         existing_groups.unshift(group);
         added_count++;
