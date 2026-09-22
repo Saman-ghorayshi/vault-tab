@@ -12,6 +12,7 @@ import {
 } from '../common/crypto.js';
 import { is_restorable_url, get_url_status } from '../common/urls.js';
 import { LocalTabEmbedder, calculate_cosine_similarity, kmeans_cluster } from '../common/embedder.js';
+import { sync_to_drive, download_from_drive } from '../common/sync.js';
 
 const VERIFIER_STRING = 'aegis-verification-string';
 
@@ -200,6 +201,65 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  // Cloud Sync: Export to Google Drive
+  const cloud_sync_btn = document.getElementById('cloud-sync-button');
+  if (cloud_sync_btn) {
+    cloud_sync_btn.addEventListener('click', async () => {
+      try {
+        const groups = await get_tab_groups(active_username);
+        const user = await get_user_by_username(active_username);
+        
+        if (groups.length === 0) {
+          show_toast('No saved tabs to sync.', 'info');
+          return;
+        }
+
+        const backup_data = {
+          format: 'vaulttab-backup',
+          version: 1,
+          exported_at: new Date().toISOString(),
+          exported_by: active_username,
+          password_salt: user?.password_salt || null,
+          password_verifier: user?.password_verifier || null,
+          password_iterations: user?.password_iterations || null,
+          group_count: groups.length,
+          groups: groups
+        };
+
+        cloud_sync_btn.disabled = true;
+        cloud_sync_btn.textContent = 'Syncing...';
+        
+        await sync_to_drive(backup_data);
+        show_toast('Successfully synced vault to Google Drive!', 'success');
+      } catch (err) {
+        show_toast(`Cloud sync failed: ${err.message}`, 'error');
+      } finally {
+        cloud_sync_btn.disabled = false;
+        cloud_sync_btn.textContent = 'Cloud Sync';
+      }
+    });
+  }
+
+  // Cloud Restore: Import from Google Drive
+  const cloud_restore_btn = document.getElementById('cloud-restore-button');
+  if (cloud_restore_btn) {
+    cloud_restore_btn.addEventListener('click', async () => {
+      try {
+        cloud_restore_btn.disabled = true;
+        cloud_restore_btn.textContent = 'Restoring...';
+        
+        const backup_data = await download_from_drive();
+        await process_backup_import(backup_data); // Delegate to shared import logic
+        show_toast('Successfully restored from Google Drive!', 'success');
+      } catch (err) {
+        show_toast(`Cloud restore failed: ${err.message}`, 'error');
+      } finally {
+        cloud_restore_btn.disabled = false;
+        cloud_restore_btn.textContent = 'Cloud Restore';
+      }
+    });
+  }
+
   // import a .vaulttab or .aegis backup file and merge groups into storage
   const import_backup_button = document.getElementById('import-backup-button');
   const import_backup_file = document.getElementById('import-backup-file');
@@ -213,65 +273,65 @@ document.addEventListener('DOMContentLoaded', async () => {
         const text = await file.text();
         const backup_data = JSON.parse(text);
 
-        if (!backup_data.format || (backup_data.format !== 'vaulttab-backup' && backup_data.format !== 'aegis-backup')) {
-          show_toast('This is not a valid VaultTab backup file.', 'error');
-          import_backup_file.value = '';
-          return;
-        }
-
-        if (!backup_data.groups || !Array.isArray(backup_data.groups)) {
-          show_toast('Backup file is corrupted or missing group data.', 'error');
-          import_backup_file.value = '';
-          return;
-        }
-
-        // determine which user the backup belongs to
-        const backup_username = backup_data.exported_by || active_username;
-        let import_target = backup_username;
-
-        // if the backup user doesn't exist locally, create them from the
-        // exported credentials so the original password can still unlock.
-        if (backup_username !== active_username) {
-          const existing = await get_user_by_username(backup_username);
-          if (!existing) {
-            if (!backup_data.password_salt || !backup_data.password_verifier) {
-              show_toast('Backup file is missing credentials. Cannot restore this account.', 'error');
-              import_backup_file.value = '';
-              return;
-            }
-            const new_user = {
-              username: backup_username,
-              password_salt: backup_data.password_salt,
-              password_verifier: backup_data.password_verifier,
-              password_iterations: backup_data.password_iterations || null,
-              tab_groups: []
-            };
-            await save_user(new_user);
-            import_target = backup_username;
-          }
-        }
-
-        // merge: load existing groups for the target user, then add backup groups
-        // avoid duplicates by checking group ids
-        const existing_groups = await get_tab_groups(import_target);
-        const existing_ids = new Set(existing_groups.map(g => g.id));
-        let added_count = 0;
-
-        for (const group of backup_data.groups) {
-          if (!existing_ids.has(group.id)) {
-            existing_groups.unshift(group);
-            added_count++;
-          }
-        }
-
-        await save_tab_groups(import_target, existing_groups);
-        show_toast(`Imported ${added_count} group(s) from backup.`, 'success');
-        location.reload();
+        await process_backup_import(backup_data);
       } catch (error) {
         show_toast(`Failed to import backup: ${error.message}`, 'error');
       }
       import_backup_file.value = '';
     });
+  }
+
+  async function process_backup_import(backup_data) {
+    if (!backup_data.format || (backup_data.format !== 'vaulttab-backup' && backup_data.format !== 'aegis-backup')) {
+      throw new Error('This is not a valid VaultTab backup file.');
+    }
+
+    if (!backup_data.groups || !Array.isArray(backup_data.groups)) {
+      throw new Error('Backup file is corrupted or missing group data.');
+    }
+
+    // determine which user the backup belongs to
+    const backup_username = backup_data.exported_by || active_username;
+    let import_target = backup_username;
+
+    // if the backup user doesn't exist locally, create them from the
+    // exported credentials so the original password can still unlock.
+    if (backup_username !== active_username) {
+      const existing = await get_user_by_username(backup_username);
+      if (!existing) {
+        if (!backup_data.password_salt || !backup_data.password_verifier) {
+          throw new Error('Backup file is missing credentials. Cannot restore this account.');
+        }
+        const new_user = {
+          username: backup_username,
+          password_salt: backup_data.password_salt,
+          password_verifier: backup_data.password_verifier,
+          password_iterations: backup_data.password_iterations || null,
+          tab_groups: []
+        };
+        await save_user(new_user);
+        import_target = backup_username;
+      }
+    }
+
+    // merge: load existing groups for the target user, then add backup groups
+    // avoid duplicates by checking group ids
+    const existing_groups = await get_tab_groups(import_target);
+    const existing_ids = new Set(existing_groups.map(g => g.id));
+    let added_count = 0;
+
+    for (const group of backup_data.groups) {
+      if (!existing_ids.has(group.id)) {
+        existing_groups.unshift(group);
+        added_count++;
+      }
+    }
+
+    await save_tab_groups(import_target, existing_groups);
+    show_toast(`Imported ${added_count} group(s) from backup.`, 'success');
+    
+    // reload to decrypt the new state
+    setTimeout(() => location.reload(), 1500);
   }
 
   setup_paste_modal();
@@ -2477,6 +2537,41 @@ function restore_search_order() {
   search_state.group_order = [];
 }
 
+// parse advanced search queries into an AST-like structure of filter terms
+function parse_search_query(query) {
+  const terms = [];
+  const regex = /(-)?(?:(domain|url|title):)?(?:"([^"]+)"|([^\s]+))/g;
+  let match;
+  while ((match = regex.exec(query)) !== null) {
+    const is_negation = !!match[1];
+    const field = match[2];
+    const value = (match[3] || match[4])?.toLowerCase();
+    if (value) {
+      terms.push({ is_negation, field, value });
+    }
+  }
+  return terms;
+}
+
+// evaluate a tab against a set of search terms
+function evaluate_tab_search(terms, title_text, url_text) {
+  for (const term of terms) {
+    let matched = false;
+    if (term.field === 'domain' || term.field === 'url') {
+      matched = url_text.includes(term.value);
+    } else if (term.field === 'title') {
+      matched = title_text.includes(term.value);
+    } else {
+      matched = title_text.includes(term.value) || url_text.includes(term.value);
+    }
+    
+    if (term.is_negation ? matched : !matched) {
+      return false; // AND logic: all terms must satisfy
+    }
+  }
+  return true;
+}
+
 // filter visible tabs based on search input
 function filter_tabs_by_search() {
   // semantic search shuffles the dom; restoring first keeps the user's real
@@ -2486,17 +2581,27 @@ function filter_tabs_by_search() {
 
   const search_input = document.getElementById('search-input');
   if (!search_input) return;
-  const query = search_input.value.toLowerCase().trim();
+  const query = search_input.value.trim();
 
   const all_tab_items = document.querySelectorAll('.tab-item');
   let visible_count = 0;
+
+  if (!query) {
+    all_tab_items.forEach(tab_item => tab_item.style.display = '');
+    document.querySelectorAll('.group-card').forEach(card => card.style.display = '');
+    return;
+  }
+
+  const terms = parse_search_query(query);
 
   all_tab_items.forEach(tab_item => {
     const tab_link = tab_item.querySelector('.tab-link');
     if (!tab_link) return;
     const title_text = tab_link.textContent.toLowerCase();
     const url_text = (tab_item.dataset.url || '').toLowerCase();
-    const matches = title_text.includes(query) || url_text.includes(query);
+    
+    const matches = evaluate_tab_search(terms, title_text, url_text);
+    
     tab_item.style.display = matches ? '' : 'none';
     if (matches) visible_count++;
   });
@@ -2690,29 +2795,24 @@ async function start_neural_training() {
       return;
     }
 
-    // build the training dataset
-    const dataset = embedder.create_training_dataset(decrypted_groups);
-
-    if (dataset.length === 0) {
-      if (status_el) status_el.textContent = 'No tokens found in tab data';
-      if (train_button) { train_button.disabled = false; train_button.textContent = 'Train Model'; }
-      return;
-    }
-
-    if (vocab_display) vocab_display.textContent = `Vocab: ${embedder.vocab_size}`;
-
-    // run training with chunked execution
-    const epochs = 20;
-    const learning_rate = 0.05;
-
-    embedder.train_epochs(dataset, epochs, learning_rate,
-      (progress) => {
+    // Spawn Web Worker for non-blocking ML training
+    const worker = new Worker('../common/worker.js', { type: 'module' });
+    
+    worker.onmessage = (e) => {
+      const { type, progress, serialized_state, loss_history, vocab_size, error } = e.data;
+      
+      if (type === 'TRAIN_VOCAB') {
+        if (vocab_display) vocab_display.textContent = `Vocab: ${vocab_size}`;
+      } 
+      else if (type === 'TRAIN_PROGRESS') {
         if (loss_display) loss_display.textContent = `Loss: ${progress.loss.toFixed(4)}`;
         if (epoch_display) epoch_display.textContent = `Epoch: ${progress.epoch}/${progress.total_epochs}`;
-        update_loss_chart(loss_chart, embedder.loss_history);
-      },
-      () => {
-        // training complete
+        update_loss_chart(loss_chart, progress.loss_history);
+      } 
+      else if (type === 'TRAIN_COMPLETE') {
+        // Update main thread embedder with trained weights
+        embedder.deserialize(serialized_state);
+        
         if (status_el) {
           status_el.textContent = 'Trained';
           status_el.classList.add('trained');
@@ -2721,15 +2821,34 @@ async function start_neural_training() {
           train_button.disabled = false;
           train_button.textContent = 'Retrain';
         }
-        update_loss_chart(loss_chart, embedder.loss_history);
+        update_loss_chart(loss_chart, loss_history);
 
-        // persist the trained model to storage (per-user, encrypted at rest)
-        save_model(active_username, embedder.serialize(), session_key);
+        // Persist the trained model to storage (per-user, encrypted at rest)
+        save_model(active_username, serialized_state, session_key);
 
-        // apply clustering to the rendered tabs
+        // Apply clustering to the rendered tabs
         apply_clustering_to_tabs(decrypted_groups);
+        
+        worker.terminate();
       }
-    );
+      else if (type === 'TRAIN_ERROR') {
+        if (status_el) status_el.textContent = `Error: ${error}`;
+        if (train_button) { train_button.disabled = false; train_button.textContent = 'Train Model'; }
+        worker.terminate();
+      }
+    };
+
+    // Start training in background
+    worker.postMessage({
+      type: 'TRAIN_MODEL',
+      payload: {
+        decrypted_groups,
+        epochs: 20,
+        learning_rate: 0.05,
+        serialized_state: embedder.serialize()
+      }
+    });
+
   } catch (error) {
     if (status_el) status_el.textContent = `Error: ${error.message}`;
     if (train_button) { train_button.disabled = false; train_button.textContent = 'Train Model'; }

@@ -20,7 +20,7 @@
         <span id="current-user-display" class="current-user-display"></span>
       </div>
       <div class="header-actions">
-        <input type="text" id="search-input" class="search-input" placeholder="Search tabs..." />
+        <input type="text" id="search-input" class="search-input" placeholder="Search tabs... (e.g. domain:github -login)" title="Advanced search supported! Use domain:, title:, -negation, or &quot;exact phrase&quot;" />
         <label class="search-mode-toggle" title="Use neural network semantic search">
           <input type="checkbox" id="semantic-search-toggle" />
           <span>Semantic</span>
@@ -30,6 +30,8 @@
         <button id="import-button" class="secondary-button">Import URLs</button>
         <button id="export-backup-button" class="secondary-button">Export Backup</button>
         <button id="import-backup-button" class="secondary-button">Import Backup</button>
+        <button id="cloud-sync-button" class="secondary-button" title="Sync encrypted vault to Google Drive">Cloud Sync</button>
+        <button id="cloud-restore-button" class="secondary-button" title="Restore vault from Google Drive">Cloud Restore</button>
         <button id="paste-urls-button" class="secondary-button">Paste URLs</button>
         <button id="lock-button" class="lock-button">Lock</button>
       </div>
