@@ -16,45 +16,12 @@ import {
 } from './common/crypto.js';
 import { get_url_status, derive_title_from_url } from './common/urls.js';
 import { generate_challenge, verify_assertion, make_registration_options } from './common/webauthn.js';
+import { AsyncMutex } from './common/mutex.js';
 
 const VERIFIER_STRING = 'aegis-verification-string';
 
 // --- Centralized Write Queue (Distributed Mutex with Dead Man's Switch) ---
 // Prevents cross-context race conditions and handles UI tab crashes
-class AsyncMutex {
-  constructor() {
-    this.queue = [];
-    this.locked = false;
-    this.lease_timeout = null;
-  }
-  async lock() {
-    return new Promise(resolve => {
-      this.queue.push(resolve);
-      this.dispatch();
-    });
-  }
-  dispatch() {
-    if (this.locked || this.queue.length === 0) return;
-    this.locked = true;
-    
-    // Dead Man's Switch: If the client tab crashes or hangs, 
-    // force unlock after 5 seconds to prevent permanent deadlock
-    this.lease_timeout = setTimeout(() => {
-      console.warn("Mutex lease expired! Force unlocking to prevent deadlock.");
-      this.unlock();
-    }, 5000);
-    
-    this.queue.shift()(this.unlock.bind(this));
-  }
-  unlock() {
-    if (this.lease_timeout) {
-      clearTimeout(this.lease_timeout);
-      this.lease_timeout = null;
-    }
-    this.locked = false;
-    this.dispatch();
-  }
-}
 const storage_mutex = new AsyncMutex();
 
 async function safely_append_to_groups(username, new_group) {

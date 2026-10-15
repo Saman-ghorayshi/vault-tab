@@ -1,69 +1,53 @@
 import test from 'node:test';
 import assert from 'node:assert';
+import { AsyncMutex } from '../common/mutex.js';
 
-// Simulate the Background Service Worker's Mutex State
-class FlawedDistributedMutex {
-  constructor() {
-    this.queue = [];
-    this.locked = false;
-  }
-  
-  async acquire() {
-    return new Promise(resolve => {
-      this.queue.push(resolve);
-      this.dispatch();
-    });
-  }
-  
-  dispatch() {
-    if (this.locked || this.queue.length === 0) return;
-    this.locked = true;
-    this.queue.shift()();
-  }
-  
-  release() {
-    this.locked = false;
-    this.dispatch();
-  }
-}
+// Exercises the REAL AsyncMutex from background.js (extracted to common/mutex.js
+// so the service worker and the test suite share one implementation).
 
 test('VULNERABILITY HUNT: Distributed Deadlock (Tab Crash)', async () => {
-  const mutex = new FlawedDistributedMutex();
+  const mutex = new AsyncMutex(50); // 50ms lease for test speed
   let tab2_acquired_lock = false;
 
-  // Tab 1: Acquires the lock, but "crashes" before releasing it
+  // Tab 1: acquires the lock, then "crashes" — never calls unlock.
+  // The dead-man's-switch lease timeout is what must let Tab 2 in.
   const tab1_process = async () => {
-    await mutex.acquire();
-    // Simulate a fatal crash (e.g. user closes tab, or uncaught exception)
-    throw new Error("Tab 1 crashed unexpectedly!");
-    // mutex.release() is never called!
+    await mutex.lock();
+    throw new Error('Tab 1 crashed unexpectedly!');
   };
 
-  // Tab 2: Tries to acquire the lock after Tab 1
   const tab2_process = async () => {
-    // Wait slightly to ensure Tab 1 gets the lock first
-    await new Promise(r => setTimeout(r, 10)); 
-    await mutex.acquire();
+    const unlock = await mutex.lock();
     tab2_acquired_lock = true;
-    mutex.release();
+    unlock();
   };
 
-  // Run them concurrently
-  try {
-    await tab1_process();
-  } catch (e) {
-    // Expected crash
-  }
-  
-  // Tab 2 is still running in the background, waiting for the lock
+  try { await tab1_process(); } catch (_) { /* expected crash */ }
   tab2_process();
-  
-  // Wait enough time for Tab 2 to theoretically acquire it
-  await new Promise(r => setTimeout(r, 50));
-  
+
+  // lease is 50ms; 150ms is plenty for the force-unlock to fire
+  await new Promise(r => setTimeout(r, 150));
   assert.strictEqual(
-    tab2_acquired_lock, 
-    true, 
-    "DEADLOCK DETECTED! Tab 2 is permanently locked out because Tab 1 crashed."
+    tab2_acquired_lock,
+    true,
+    'DEADLOCK DETECTED! Lease timeout failed to force-unlock after a crashed holder.'
   );
+});
+
+test('AsyncMutex: normal lock/release hands off to the next waiter', async () => {
+  const mutex = new AsyncMutex(5000);
+  const order = [];
+
+  const worker = async (name, delay) => {
+    const unlock = await mutex.lock();
+    order.push(`${name}:start`);
+    await new Promise(r => setTimeout(r, delay));
+    order.push(`${name}:end`);
+    unlock();
+  };
+
+  await Promise.all([worker('a', 20), worker('b', 5), worker('c', 1)]);
+
+  // strict alternation: each job's start follows the previous job's end
+  assert.deepStrictEqual(order, ['a:start', 'a:end', 'b:start', 'b:end', 'c:start', 'c:end']);
 });

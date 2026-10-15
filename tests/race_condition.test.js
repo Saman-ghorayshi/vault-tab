@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert';
+import { AsyncMutex } from '../common/mutex.js';
 
 // Simulate Chrome Storage Local with artificial async delays
 const mockStorage = {
-  data: { 'vaulttab_groups_testuser': [] },
+  data: {},
   async get(key) {
     return new Promise(resolve => {
       setTimeout(() => {
@@ -31,26 +32,42 @@ async function save_tab_groups(username, groups) {
   await mockStorage.set({ [`vaulttab_groups_${username}`]: groups });
 }
 
-// This simulates the exact code in popup.js and background.js
-async function simulate_save_tab(tab_id) {
-  const groups = await get_tab_groups('testuser');
-  groups.unshift({ id: tab_id, title: `Tab ${tab_id}` });
-  await save_tab_groups('testuser', groups);
+// Mirrors background.js: aegis:save-group -> safely_append_to_groups —
+// read-modify-write serialized through the service worker's AsyncMutex.
+const storage_mutex = new AsyncMutex(5000);
+
+async function safely_append_to_groups(username, new_group) {
+  const unlock = await storage_mutex.lock();
+  try {
+    const groups = await get_tab_groups(username);
+    groups.unshift(new_group);
+    await save_tab_groups(username, groups);
+  } finally {
+    unlock();
+  }
 }
 
 test('VULNERABILITY HUNT: Storage Race Condition', async () => {
-  // Fire 10 saves completely concurrently
+  mockStorage.data['vaulttab_groups_testuser'] = [];
   const promises = [];
   for (let i = 0; i < 10; i++) {
-    promises.push(simulate_save_tab(i));
+    // each save goes through the SW mutex queue, exactly like popup.js does
+    promises.push(safely_append_to_groups('testuser', { id: i, title: `Tab ${i}` }));
   }
-  
   await Promise.all(promises);
-  
   const final_groups = await get_tab_groups('testuser');
-  
-  // If our code is protected against race conditions, we should have 10 tabs.
-  // Because Chrome Storage is async and disconnected between context scripts, 
-  // without a mutex or delegation, this will definitely fail!
   assert.strictEqual(final_groups.length, 10, `Data loss from Race Condition! Expected 10 saved tabs, but only got ${final_groups.length}`);
+});
+
+test('control: the same 10 saves WITHOUT the mutex lose data (regression guard)', async () => {
+  mockStorage.data['vaulttab_groups_bare'] = [];
+  const unprotected = async (i) => {
+    // exact race the test hunts: read once, write back stale
+    const groups = await get_tab_groups('bare');
+    groups.unshift({ id: i, title: `Tab ${i}` });
+    await save_tab_groups('bare', groups);
+  };
+  await Promise.all(Array.from({ length: 10 }, (_, i) => unprotected(i)));
+  const final_groups = await get_tab_groups('bare');
+  assert.ok(final_groups.length < 10, 'control expected the unprotected path to lose writes — mock timing changed?');
 });
