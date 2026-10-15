@@ -60,6 +60,7 @@ function show_toast(message, type = 'info') {
   const toast = document.createElement('div');
   toast.id = 'aegis-toast';
   toast.className = `aegis-toast ${type}`;
+  toast.setAttribute('role', 'status'); // announced by screen readers
   toast.textContent = message;
   document.body.appendChild(toast);
 
@@ -1038,16 +1039,28 @@ function setup_keyboard_shortcuts() {
       if (modal) modal.classList.remove('hidden');
     }
 
-    // Escape: clear selection and close any open modal
+    // Escape: close the top-most open modal, else clear selection
     if (e.key === 'Escape') {
-      const shortcuts_modal = document.getElementById('shortcuts-modal');
-      if (shortcuts_modal && !shortcuts_modal.classList.contains('hidden')) {
-        shortcuts_modal.classList.add('hidden');
+      e.preventDefault();
+      const open_modals = ['paste-modal', 'shortcuts-modal', 'manager-setup-modal',
+        'manager-delete-modal', 'manager-change-pw-modal']
+        .map(id => document.getElementById(id))
+        .filter(m => m && !m.classList.contains('hidden'));
+      if (open_modals.length > 0) {
+        close_modal(open_modals[0]);
       } else {
         clear_selection();
       }
     }
   });
+}
+
+// hide a modal and restore focus to the page body so keyboard
+// navigation keeps working after it closes
+function close_modal(modal) {
+  modal.classList.add('hidden');
+  modal.style.display = 'none';
+  document.activeElement?.blur?.();
 }
 
 // open selected tabs, or if nothing selected, open the focused tab

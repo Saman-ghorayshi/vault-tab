@@ -95,9 +95,9 @@
     </div>
 
     <!-- account setup modal (hidden, shown via + Add Account or the unlock link) -->
-    <div id="manager-setup-modal" class="hidden modal" style="display:none">
+    <div id="manager-setup-modal" class="hidden modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="setup-modal-title">
       <div class="modal-content" style="padding:24px;max-width:400px">
-        <h2>Create Account</h2>
+        <h2 id="setup-modal-title">Create Account</h2>
         <div class="form-group">
           <input type="text" id="manager-setup-username" placeholder="Username" />
         </div>
@@ -124,9 +124,9 @@
     </div>
 
     <!-- delete-account confirmation modal -->
-    <div id="manager-delete-modal" class="hidden modal" style="display:none">
+    <div id="manager-delete-modal" class="hidden modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
       <div class="modal-content" style="padding:24px;max-width:420px">
-        <h2>Delete Account</h2>
+        <h2 id="delete-modal-title">Delete Account</h2>
         <div id="delete-account-details" class="modal-body" style="border:none;padding:0">
           <p>This will permanently delete the account <strong id="delete-account-name"></strong> and all its data:</p>
           <ul style="margin:12px 0 16px;padding-left:20px;line-height:1.8">
@@ -150,9 +150,9 @@
     </div>
 
     <!-- change-password modal -->
-    <div id="manager-change-pw-modal" class="hidden modal" style="display:none">
+    <div id="manager-change-pw-modal" class="hidden modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="cpw-modal-title">
       <div class="modal-content" style="padding:24px;max-width:400px">
-        <h2>Change Password</h2>
+        <h2 id="cpw-modal-title">Change Password</h2>
         <div class="form-group">
           <div class="password-wrapper">
             <input type="password" id="change-pw-current" placeholder="Current password" />
@@ -203,7 +203,7 @@
   </div>
 
   <!-- paste urls modal -->
-  <div id="paste-modal" class="modal hidden">
+  <div id="paste-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Paste URLs">
     <div class="modal-content">
       <div class="modal-header">
         <h3>Paste URLs</h3>
@@ -240,7 +240,7 @@
   </div>
 
   <!-- keyboard shortcuts guide modal (press ? to open) -->
-  <div id="shortcuts-modal" class="modal hidden">
+  <div id="shortcuts-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
     <div class="modal-content shortcuts-modal-content">
       <div class="modal-header">
         <h3>Keyboard Shortcuts</h3>

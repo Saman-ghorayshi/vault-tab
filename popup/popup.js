@@ -1,13 +1,11 @@
 import {
   get_all_users, save_user, get_user_by_username,
-  get_tab_groups, save_tab_groups,
   get_session_key, store_session_key, set_session_user, get_session_user,
   load_model
 } from '../common/storage.js';
 import {
-  generate_salt, derive_key_from_password, encrypt, decrypt,
-  array_buffer_to_base64, base64_to_array_buffer,
-  OLD_ITERATIONS, CURRENT_ITERATIONS
+  generate_salt, derive_key_from_password, encrypt,
+  array_buffer_to_base64, CURRENT_ITERATIONS
 } from '../common/crypto.js';
 import { get_url_status, derive_title_from_url } from '../common/urls.js';
 
@@ -27,6 +25,7 @@ function show_toast(message, type = 'info') {
   const toast = document.createElement('div');
   toast.id = 'aegis-toast';
   toast.className = `aegis-toast ${type}`;
+  toast.setAttribute('role', 'status'); // announced by screen readers
   toast.textContent = message;
   document.body.appendChild(toast);
 
