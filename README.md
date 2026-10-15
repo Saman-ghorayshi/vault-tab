@@ -88,6 +88,32 @@ A Chrome extension that securely saves, organizes, and restores browser tabs usi
 - **Always restore to Private window** — Toggle to always use incognito
 - **Auto-lock after** — Automatically lock after inactivity (off, 5-60 min)
 
+### Cloud Sync setup (Google Drive)
+
+Cloud Sync / Cloud Restore upload and download your **encrypted** vault to a
+hidden file (`vaulttab-cloud-backup.vaulttab`) in your own Google Drive's
+app-data folder. Google never sees your tab data — only ciphertext. It needs a
+one-time OAuth setup (5 minutes):
+
+1. Go to https://console.cloud.google.com → create a project (any name).
+2. **APIs & Services → Library** → enable **Google Drive API**.
+3. **APIs & Services → OAuth consent screen** → External → add yourself as a
+   **Test User** (the app stays in "Testing" mode — that's fine for personal use).
+4. **APIs & Services → Credentials → Create credentials → OAuth client ID** →
+   type **Chrome Extension** → paste your extension ID. Load the unpacked
+   extension once and read the ID from `chrome://extensions` (it is pinned by
+   the `key` field in manifest.json, so it stays the same on every machine).
+5. Copy the client ID (`....apps.googleusercontent.com`) into `manifest.json`'s
+   `oauth2.client_id`, then reload the extension.
+
+**Troubleshooting:**
+- *"Bad client id / invalid client"* — client_id not filled in, or extension ID
+  not added at step 4.
+- *"Access blocked: app has not completed verification"* — add your Google
+  account as a Test User at step 3.
+- Sync button does nothing and the console shows a CSP error — reload the
+  extension after editing manifest.json.
+
 ## Architecture
 
 ```mermaid

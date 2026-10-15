@@ -67,13 +67,14 @@ for a browser extension.
 
 ## Known limitations
 
-### No cross-device sync
+### No cross-device sync (except the opt-in Drive backup)
 
-Data lives only in the local browser profile. There is no server, no
-cloud sync, no account-based relay. Losing the device (or wiping the
-profile) without a manual `.aegis` backup means losing the data. The
-export/import backup exists precisely so you can move a vault to a new
-machine — use it.
+Data lives in the local browser profile. The only remote copy is the
+**opt-in** Cloud Sync / Cloud Restore feature, which uploads the same
+encrypted `.vaulttab` payload you can export by hand to a hidden file in
+**your own Google Drive** app-data folder. Google stores ciphertext only —
+the salt/verifier caveat below applies to that file too. Without using
+that feature (or a manual export), losing the device means losing the data.
 
 ### Backups contain the salt and verifier
 

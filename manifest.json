@@ -12,8 +12,9 @@
     "scripting",
     "identity"
   ],
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7DoTqHJlKyha9xliO0nEgBgk35o4vFhsNctzQX48sd5Z26GG0H3tn4o9o9s6IlQ9+ZVnYo9NcxOvRRJm2edgB0ungsVJ3OldqBrxugNHNWe2GxVOPucEaVhEttTzdNtOgO2+mg7175f06D787PdXI8YuwMMeHGWIFQm3yrWAU6w/RT4UXM43a8QgKMoax0psOUFkoLpVaJiL6VLWy9BQfa869HWKECcMYK7Bms+0QTi2Al3EgbXIx9kQxMnvQNbTfL0mBYLbDqp1YK336KCy9HfRqLDeZCraeQkOliacxNm0I73ZuQsE5HC+pZLXPKxkgvxoCDhwDeXaddrGbPRfmwIDAQAB",
   "oauth2": {
-    "client_id": "YOUR_GOOGLE_OAUTH_CLIENT_ID",
+    "client_id": "REPLACE_WITH_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com",
     "scopes": ["https://www.googleapis.com/auth/drive.file"]
   },
   "host_permissions": [],

@@ -4,7 +4,7 @@ export async function get_auth_token(interactive = true) {
   return new Promise((resolve, reject) => {
     chrome.identity.getAuthToken({ interactive }, (token) => {
       if (chrome.runtime.lastError) {
-        reject(chrome.runtime.lastError);
+        reject(friendly_auth_error(chrome.runtime.lastError));
       } else if (!token) {
         reject(new Error('Auth token could not be retrieved.'));
       } else {
@@ -12,6 +12,25 @@ export async function get_auth_token(interactive = true) {
       }
     });
   });
+}
+
+// chrome.identity auth errors are cryptic one-liners. map the common ones
+// (bad client id, unregistered extension) to instructions that actually fix them.
+function friendly_auth_error(err) {
+  const msg = String(err?.message || err);
+  if (/bad client id|invalid client|invalid_client|unauthorized_client/i.test(msg)) {
+    return new Error(
+      'Google rejected the OAuth client. Put your real OAuth client_id in manifest.json ' +
+      'and add the extension ID as a Test User in Google Cloud Console (see README - Cloud Sync setup).'
+    );
+  }
+  if (/origin|redirect/i.test(msg)) {
+    return new Error(
+      'OAuth redirect mismatch. Add https://<your-extension-ID>.chromiumapp.org as an ' +
+      'Authorized redirect URI of the OAuth client (see README - Cloud Sync setup).'
+    );
+  }
+  return err instanceof Error ? err : new Error(msg);
 }
 
 // Upload the encrypted backup JSON to the user's Drive.
