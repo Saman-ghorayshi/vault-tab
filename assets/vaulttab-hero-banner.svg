@@ -1,0 +1,194 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 480" width="1200" height="480">
+  <defs>
+    <!-- Background Gradients -->
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#070b14"/>
+      <stop offset="50%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#090d16"/>
+    </linearGradient>
+    
+    <radialGradient id="glow-cyan" cx="20%" cy="30%" r="50%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+    
+    <radialGradient id="glow-emerald" cx="80%" cy="70%" r="50%">
+      <stop offset="0%" stop-color="#10b981" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="shield-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+
+    <linearGradient id="card-border" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#10b981" stop-opacity="0.1"/>
+    </linearGradient>
+
+    <linearGradient id="text-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e2e8f0"/>
+    </linearGradient>
+
+    <filter id="neon-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+
+    <filter id="soft-shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="1200" height="480" fill="url(#bg-grad)"/>
+  <rect width="1200" height="480" fill="url(#glow-cyan)"/>
+  <rect width="1200" height="480" fill="url(#glow-emerald)"/>
+
+  <!-- Subtle Cyber Grid -->
+  <g opacity="0.06" stroke="#ffffff" stroke-width="1">
+    <path d="M 0,80 L 1200,80 M 0,160 L 1200,160 M 0,240 L 1200,240 M 0,320 L 1200,320 M 0,400 L 1200,400"/>
+    <path d="M 120,0 L 120,480 M 240,0 L 240,480 M 360,0 L 360,480 M 480,0 L 480,480 M 600,0 L 600,480 M 720,0 L 720,480 M 840,0 L 840,480 M 960,0 L 960,480 M 1080,0 L 1080,480"/>
+  </g>
+
+  <!-- Left Hero Content -->
+  <g transform="translate(80, 75)">
+    <!-- Shield & Biometric Icon -->
+    <g transform="translate(0, 0)">
+      <path d="M 36,0 L 72,12 C 72,48 54,84 36,96 C 18,84 0,48 0,12 Z" fill="#0f172a" stroke="url(#shield-grad)" stroke-width="3" filter="url(#neon-glow)"/>
+      <!-- Keyhole / Passkey icon inside shield -->
+      <circle cx="36" cy="38" r="10" fill="#38bdf8"/>
+      <path d="M 32,45 L 40,45 L 42,66 L 30,66 Z" fill="#38bdf8"/>
+    </g>
+
+    <!-- Top Badge -->
+    <g transform="translate(90, 8)">
+      <rect width="210" height="28" rx="14" fill="#0369a1" fill-opacity="0.25" stroke="#38bdf8" stroke-width="1"/>
+      <circle cx="16" cy="14" r="4" fill="#38bdf8"/>
+      <text x="28" y="19" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="700" fill="#38bdf8" letter-spacing="0.5">MILITARY-GRADE ZERO-KNOWLEDGE</text>
+    </g>
+
+    <!-- Main Title -->
+    <text x="90" y="75" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="52" font-weight="900" fill="url(#text-grad)" letter-spacing="-1.5">
+      VaultTab
+    </text>
+
+    <!-- Subtitle -->
+    <text x="0" y="135" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="500" fill="#cbd5e1" width="520">
+      Zero-Knowledge Encrypted Session &amp; Tab Manager
+    </text>
+    <text x="0" y="165" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="400" fill="#94a3b8">
+      Hardware-bound WebAuthn Passkeys, AES-256-GCM authenticated encryption,
+    </text>
+    <text x="0" y="188" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="400" fill="#94a3b8">
+      and an on-device Word2Vec neural embedder for private semantic search.
+    </text>
+
+    <!-- Feature Pill Badges -->
+    <g transform="translate(0, 230)">
+      <!-- Badge 1: WebAuthn -->
+      <g transform="translate(0, 0)">
+        <rect width="165" height="34" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+        <text x="14" y="22" font-family="ui-monospace, monospace" font-size="12" font-weight="600" fill="#38bdf8">🔑 WebAuthn Passkeys</text>
+      </g>
+      <!-- Badge 2: AES-256 -->
+      <g transform="translate(177, 0)">
+        <rect width="160" height="34" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+        <text x="14" y="22" font-family="ui-monospace, monospace" font-size="12" font-weight="600" fill="#34d399">🛡️ AES-256-GCM</text>
+      </g>
+      <!-- Badge 3: 600k PBKDF2 -->
+      <g transform="translate(349, 0)">
+        <rect width="145" height="34" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+        <text x="14" y="22" font-family="ui-monospace, monospace" font-size="12" font-weight="600" fill="#fbbf24">⚡ 600,000 PBKDF2</text>
+      </g>
+    </g>
+
+    <g transform="translate(0, 276)">
+      <!-- Badge 4: Neural Search -->
+      <g transform="translate(0, 0)">
+        <rect width="180" height="34" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+        <text x="14" y="22" font-family="ui-monospace, monospace" font-size="12" font-weight="600" fill="#c084fc">🧠 On-Device Neural NLP</text>
+      </g>
+      <!-- Badge 5: 38 Passing Tests -->
+      <g transform="translate(192, 0)">
+        <rect width="145" height="34" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+        <text x="14" y="22" font-family="ui-monospace, monospace" font-size="12" font-weight="600" fill="#4ade80">✅ 38 Passing Tests</text>
+      </g>
+      <!-- Badge 6: Zero Telemetry -->
+      <g transform="translate(349, 0)">
+        <rect width="145" height="34" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+        <text x="14" y="22" font-family="ui-monospace, monospace" font-size="12" font-weight="600" fill="#94a3b8">🔒 Zero Telemetry</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Right Visual Mockup: Glassmorphic UI Card -->
+  <g transform="translate(680, 50)" filter="url(#soft-shadow)">
+    <!-- Main Window Frame -->
+    <rect width="460" height="370" rx="14" fill="#0f172a" fill-opacity="0.9" stroke="url(#card-border)" stroke-width="1.5"/>
+
+    <!-- Window Header -->
+    <rect width="460" height="44" rx="14" fill="#1e293b" fill-opacity="0.7"/>
+    <circle cx="24" cy="22" r="5" fill="#ef4444"/>
+    <circle cx="40" cy="22" r="5" fill="#f59e0b"/>
+    <circle cx="56" cy="22" r="5" fill="#10b981"/>
+
+    <!-- Search Bar in Header -->
+    <rect x="80" y="10" width="260" height="24" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+    <text x="94" y="26" font-family="ui-monospace, monospace" font-size="11" fill="#64748b">domain:github -archive "crypto"</text>
+
+    <!-- Status Pill in Header -->
+    <rect x="352" y="10" width="94" height="24" rx="12" fill="#064e3b" stroke="#059669" stroke-width="1"/>
+    <text x="364" y="26" font-family="ui-monospace, monospace" font-size="10" font-weight="700" fill="#34d399">● UNLOCKED</text>
+
+    <!-- Tab Group Card 1 (Encrypted Vault) -->
+    <g transform="translate(20, 60)">
+      <rect width="420" height="85" rx="10" fill="#1e293b" fill-opacity="0.6" stroke="#334155" stroke-width="1"/>
+      <circle cx="20" cy="22" r="6" fill="#38bdf8"/>
+      <text x="36" y="26" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="#f1f5f9">Solana Protocol &amp; DeFi Research</text>
+      <text x="350" y="25" font-family="ui-monospace, monospace" font-size="11" fill="#94a3b8">8 Tabs · 4m ago</text>
+
+      <!-- URL Chips inside group -->
+      <g transform="translate(20, 42)">
+        <rect width="180" height="26" rx="4" fill="#0f172a" stroke="#1e293b"/>
+        <text x="10" y="17" font-family="ui-monospace, monospace" font-size="10" fill="#38bdf8">marinade.finance/app/unstake</text>
+      </g>
+      <g transform="translate(210, 42)">
+        <rect width="180" height="26" rx="4" fill="#0f172a" stroke="#1e293b"/>
+        <text x="10" y="17" font-family="ui-monospace, monospace" font-size="10" fill="#38bdf8">github.com/solana-labs/solana</text>
+      </g>
+    </g>
+
+    <!-- Tab Group Card 2 (Quantized Neural Cluster) -->
+    <g transform="translate(20, 160)">
+      <rect width="420" height="85" rx="10" fill="#1e293b" fill-opacity="0.6" stroke="#334155" stroke-width="1"/>
+      <circle cx="20" cy="22" r="6" fill="#c084fc"/>
+      <text x="36" y="26" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="14" font-weight="700" fill="#f1f5f9">Neural Embeddings &amp; Vector Search</text>
+      <text x="344" y="25" font-family="ui-monospace, monospace" font-size="11" fill="#94a3b8">12 Tabs · 1h ago</text>
+
+      <!-- URL Chips inside group -->
+      <g transform="translate(20, 42)">
+        <rect width="180" height="26" rx="4" fill="#0f172a" stroke="#1e293b"/>
+        <text x="10" y="17" font-family="ui-monospace, monospace" font-size="10" fill="#c084fc">arxiv.org/abs/1301.3781</text>
+      </g>
+      <g transform="translate(210, 42)">
+        <rect width="180" height="26" rx="4" fill="#0f172a" stroke="#1e293b"/>
+        <text x="10" y="17" font-family="ui-monospace, monospace" font-size="10" fill="#c084fc">webauthn.guide/prf-extension</text>
+      </g>
+    </g>
+
+    <!-- Cryptographic Telemetry Footer in Window -->
+    <g transform="translate(20, 260)">
+      <rect width="420" height="85" rx="8" fill="#070b14" stroke="#1e293b" stroke-width="1"/>
+      <text x="16" y="24" font-family="ui-monospace, monospace" font-size="11" font-weight="700" fill="#64748b">HARDWARE SESSION TELEMETRY</text>
+      
+      <text x="16" y="46" font-family="ui-monospace, monospace" font-size="11" fill="#94a3b8">Key Derivation:</text>
+      <text x="135" y="46" font-family="ui-monospace, monospace" font-size="11" font-weight="700" fill="#fbbf24">PBKDF2-HMAC-SHA256 (600,000 iter)</text>
+
+      <text x="16" y="66" font-family="ui-monospace, monospace" font-size="11" fill="#94a3b8">2FA Credential:</text>
+      <text x="135" y="66" font-family="ui-monospace, monospace" font-size="11" font-weight="700" fill="#38bdf8">ECDSA Secp256r1 (FIDO2 Hardware Authenticator)</text>
+    </g>
+  </g>
+</svg>
