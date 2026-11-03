@@ -118,16 +118,16 @@ one-time OAuth setup (5 minutes):
 
 ```mermaid
 graph TD
-    A["Master Password"] -->|PBKDF2-HMAC-SHA256 (600,000 iterations)| B["AES-256-GCM Derived Key"]
-    B -->|Verify against password_verifier| C{"Verification Successful?"}
-    C -->|Yes| D["Store Session Key in chrome.storage.session (RAM only)"]
-    C -->|No| E["Deny Unlock"]
+    A["Master Password"] -->|"PBKDF2-HMAC-SHA256 (600,000 iterations)"| B["AES-256-GCM Derived Key"]
+    B -->|"Verify against password_verifier"| C{"Verification Successful?"}
+    C -->|"Yes"| D["Store Session Key in chrome.storage.session (RAM only)"]
+    C -->|"No"| E["Deny Unlock"]
     
-    D -->|Optional 2FA| F["WebAuthn Passkey Challenge (ECDSA / RS256)"]
-    F -->|Hardware Authenticator Signs| G["Unlocked Session Active"]
+    D -->|"Optional 2FA"| F["WebAuthn Passkey Challenge (ECDSA / RS256)"]
+    F -->|"Hardware Authenticator Signs"| G["Unlocked Session Active"]
     
-    G -->|Encrypt / Decrypt| H["Tab Groups JSON & Neural Model"]
-    H -->|AES-256-GCM Ciphertext + IV| I["chrome.storage.local / IndexedDB"]
+    G -->|"Encrypt / Decrypt"| H["Tab Groups JSON & Neural Model"]
+    H -->|"AES-256-GCM Ciphertext + IV"| I["chrome.storage.local / IndexedDB"]
 ```
 
 ```
