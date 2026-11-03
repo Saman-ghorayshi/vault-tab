@@ -1,5 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { webcrypto } from 'node:crypto';
+
+// Polyfill globalThis.crypto for older Node runtimes if needed
+if (!globalThis.crypto) {
+  globalThis.crypto = webcrypto;
+}
+
 import {
   array_buffer_to_base64,
   base64_to_array_buffer,

@@ -22,14 +22,25 @@ export function base64_to_array_buffer(base64) {
   return bytes.buffer;
 }
 
+const get_crypto = () => {
+  if (typeof globalThis !== 'undefined' && globalThis.crypto) return globalThis.crypto;
+  if (typeof window !== 'undefined' && window.crypto) return window.crypto;
+  return typeof crypto !== 'undefined' ? crypto : undefined;
+};
+
+// Polyfill global crypto reference if missing
+if (typeof crypto === 'undefined' && typeof globalThis !== 'undefined' && globalThis.crypto) {
+  globalThis.crypto = globalThis.crypto;
+}
+
 // generate a random 16-byte salt for key derivation
 export function generate_salt() {
-  return crypto.getRandomValues(new Uint8Array(16));
+  return (get_crypto() || crypto).getRandomValues(new Uint8Array(16));
 }
 
 // generate a random 12-byte IV for AES-GCM
 export function generate_iv() {
-  return crypto.getRandomValues(new Uint8Array(12));
+  return (get_crypto() || crypto).getRandomValues(new Uint8Array(12));
 }
 
 // iteration counts for PBKDF2-HMAC-SHA256
