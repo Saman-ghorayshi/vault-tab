@@ -272,6 +272,34 @@
     </div>
   </div>
 
+  
+  <!-- P2P Air-Gapped Share Modal -->
+  <div id="p2p-share-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="p2p-share-title" style="display:none">
+    <div class="modal-content" style="max-width: 520px; text-align: center;">
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 16px;">
+        <h3 id="p2p-share-title" style="margin: 0; font-size: 1.15rem; display: flex; align-items: center; gap: 8px;">
+          <span>⚡ Air-Gapped P2P Share</span>
+          <span style="font-size: 10px; font-weight: 600; background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3); padding: 2px 6px; border-radius: 4px;">Zero-Knowledge</span>
+        </h3>
+        <button id="p2p-share-close-btn" class="modal-close" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; align-items: center; gap: 14px;">
+        <p id="p2p-share-summary" style="margin: 0; font-size: 13px; color: var(--text-secondary);"></p>
+        <div id="p2p-qr-container" style="background: #ffffff; padding: 12px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; justify-content: center; align-items: center; min-width: 220px; min-height: 220px;"></div>
+        <div style="width: 100%; display: flex; gap: 8px; margin-top: 4px;">
+          <input type="text" id="p2p-share-link-input" readonly style="flex: 1; padding: 8px 12px; font-size: 12px; font-family: monospace; border-radius: 6px; border: 1px solid var(--border); background: rgba(0,0,0,0.2); color: var(--text-primary); text-overflow: ellipsis;" />
+          <button id="p2p-copy-link-btn" class="primary-button" style="padding: 8px 14px; white-space: nowrap;">Copy Link</button>
+        </div>
+        <p style="margin: 0; font-size: 11px; color: var(--text-secondary); line-height: 1.4; text-align: left; background: rgba(255,255,255,0.03); padding: 8px 12px; border-radius: 6px; border-left: 3px solid #10b981;">
+          🔒 <strong>Air-Gap Assurance:</strong> The encryption key is embedded solely in the URL fragment (<code>#</code>). In accordance with RFC 3986, fragments are never transmitted to any web server or ISP.
+        </p>
+      </div>
+      <div class="modal-footer" style="margin-top: 16px; display: flex; justify-content: flex-end;">
+        <button id="p2p-share-done-btn" class="secondary-button">Done</button>
+      </div>
+    </div>
+  </div>
+
   <!-- keyboard shortcuts help bar -->
   <div id="shortcuts-help" class="shortcuts-help">
     <span>Shortcuts: </span>

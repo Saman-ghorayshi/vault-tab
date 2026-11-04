@@ -243,6 +243,29 @@
   </section>
 
   <!-- Interactive App Walkthrough & Showcase -->
+  
+  <!-- Section: Air-Gapped P2P Workspace Receiver (Activated on #share= URL hash) -->
+  <section id="p2p-receiver-section" class="section-wrap" style="display:none; margin-top: 1.5rem; margin-bottom: 2.5rem; border: 2px solid #10b981; border-radius: 16px; background: rgba(16, 185, 129, 0.04); padding: 2rem;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+      <div>
+        <div style="display: flex; align-items: center; gap: .75rem; margin-bottom: .5rem;">
+          <span style="font-size: 1.5rem;">⚡</span>
+          <h2 id="incoming-workspace-title" style="margin: 0; font-size: 1.4rem; color: #fff;">Incoming Air-Gapped Workspace</h2>
+          <span style="font-size: 11px; font-weight: 700; background: rgba(16,185,129,0.2); color: #10b981; border: 1px solid #10b981; padding: 2px 8px; border-radius: 20px;">E2EE Decrypted</span>
+        </div>
+        <p id="incoming-workspace-meta" style="margin: 0; color: var(--text-dim); font-size: 13px;">Zero-knowledge payload unpacked and verified client-side.</p>
+      </div>
+      <div style="display: flex; gap: .6rem; flex-wrap: wrap;">
+        <button id="btn-open-all-incoming" class="btn-primary" style="padding: .6rem 1.2rem; font-size: 13px;">🚀 Open All Tabs in Browser</button>
+        <button id="btn-copy-incoming" class="btn-outline" style="padding: .6rem 1.2rem; font-size: 13px;">📋 Copy URLs</button>
+        <button id="btn-dismiss-incoming" class="btn-outline" style="padding: .6rem .9rem; font-size: 13px; color: var(--text-dim);">&times; Clear</button>
+      </div>
+    </div>
+    <div id="incoming-tabs-list" style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: .6rem;">
+      <!-- Populated dynamically -->
+    </div>
+  </section>
+
   <section id="live-walkthrough" class="section-wrap" style="margin-top: 2rem; margin-bottom: 3.5rem;">
     <div style="background: #090e1a; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.8), 0 0 30px rgba(56,189,248,0.12);">
       <div style="background: #0d1322; padding: 12px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
@@ -344,6 +367,46 @@
 
         <div id="encryption-terminal" class="terminal-box">
 <span class="dim">// Encrypt payload to generate ciphertext &amp; authentication tag...</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  
+  <!-- Section: Air-Gapped P2P & QR Generator Lab -->
+  <section id="p2p-lab" class="section-wrap">
+    <div class="section-head">
+      <span class="section-tag">Zero-Server Transfer</span>
+      <h2>Air-Gapped P2P Workspace Hand-Off &amp; QR</h2>
+      <p>Transfer live browser workspaces across air-gapped computers or mobile devices with zero intermediary servers. Payloads are Gzip-compressed, encrypted with ephemeral 256-bit AES-GCM, and embedded strictly into the URL hash fragment (RFC 3986 §3.5).</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">📦 Create Encrypted Share Payload</div>
+        <div class="form-group">
+          <label>Workspace / Session Name</label>
+          <input type="text" id="p2p-input-name" value="Solana & Rust Audit Workspace" />
+        </div>
+        <div class="form-group">
+          <label>Tab URLs &amp; Titles (One per line: URL | Title)</label>
+          <textarea id="p2p-input-tabs" rows="5" style="resize:vertical; font-family: monospace; font-size: 12px;">https://solana.com/docs | Solana Developer Docs
+https://github.com/coral-xyz/anchor | Anchor Framework
+https://crates.io/crates/borsh | Borsh Binary Serializer</textarea>
+        </div>
+        <button id="btn-generate-p2p" class="btn-primary" style="width:100%">⚡ Compress, Encrypt &amp; Generate QR</button>
+      </div>
+
+      <div class="card" style="display:flex; flex-direction:column; align-items:center; text-align:center;">
+        <div class="card-title" style="align-self:flex-start;">📱 Scannable Air-Gap QR Code</div>
+        <div id="p2p-portal-qr" style="background:#ffffff; padding:12px; border-radius:12px; margin: 12px 0; min-width:180px; min-height:180px; display:flex; justify-content:center; align-items:center;">
+          <span style="color:#64748b; font-size:12px;">QR will render here upon generation</span>
+        </div>
+        <div id="p2p-stats-badge" style="font-size:12px; color:var(--cyan); margin-bottom:10px; font-family:monospace;">Waiting for payload...</div>
+        <input type="text" id="p2p-share-url-result" readonly style="width:100%; padding:8px 10px; font-size:11px; font-family:monospace; background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:6px; color:var(--text); text-overflow:ellipsis;" placeholder="Encrypted URL hash will appear here..." />
+        <div style="display:flex; gap:.6rem; width:100%; margin-top:8px;">
+          <button id="btn-copy-p2p-url" class="btn-outline" style="flex:1; font-size:12px;" disabled>Copy Share URL</button>
+          <button id="btn-test-open-p2p" class="btn-outline" style="flex:1; font-size:12px;" disabled>Test Receiver</button>
         </div>
       </div>
     </div>
@@ -728,5 +791,133 @@ function renderNeuralResults() {
 document.getElementById('neural-query').addEventListener('input', renderNeuralResults);
 renderNeuralResults();
 </script>
+
+<script type="module">
+import { create_p2p_share_link, parse_p2p_share_link } from './common/p2p_share.js';
+import { generate_qr_svg } from './common/qr.js';
+
+let currentIncomingTabs = [];
+
+// Receiver logic for #share= hash
+async function checkIncomingShare() {
+  const hash = window.location.hash;
+  if (!hash || !hash.startsWith('#share=')) {
+    document.getElementById('p2p-receiver-section').style.display = 'none';
+    return;
+  }
+
+  try {
+    const workspace = await parse_p2p_share_link(hash);
+    currentIncomingTabs = workspace.tabs;
+
+    const section = document.getElementById('p2p-receiver-section');
+    const titleEl = document.getElementById('incoming-workspace-title');
+    const metaEl = document.getElementById('incoming-workspace-meta');
+    const listEl = document.getElementById('incoming-tabs-list');
+
+    titleEl.textContent = workspace.name;
+    const dateStr = workspace.created_at ? new Date(workspace.created_at).toLocaleString() : 'Just now';
+    metaEl.textContent = `${workspace.tabs.length} tabs • Created: ${dateStr} • Zero-knowledge decrypted in-browser`;
+
+    listEl.innerHTML = workspace.tabs.map((t, idx) => {
+      let domain = '';
+      try { domain = new URL(t.url).hostname; } catch(_) {}
+      return `
+        <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); border:1px solid var(--border); padding:.75rem 1rem; border-radius:8px;">
+          <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-right:1rem;">
+            <a href="${escapeHtml(t.url)}" target="_blank" rel="noopener noreferrer" style="color:var(--cyan); font-weight:600; text-decoration:none; font-size:14px;">${escapeHtml(t.title || t.url)}</a>
+            <div style="color:var(--text-dim); font-size:11px; margin-top:2px;">${escapeHtml(domain)} • ${escapeHtml(t.url)}</div>
+          </div>
+          <a href="${escapeHtml(t.url)}" target="_blank" rel="noopener noreferrer" class="btn-outline" style="padding:.3rem .7rem; font-size:11px; white-space:nowrap; text-decoration:none;">Open</a>
+        </div>
+      `;
+    }).join('');
+
+    section.style.display = 'block';
+    section.scrollIntoView({ behavior: 'smooth' });
+  } catch (err) {
+    console.error('Failed to decrypt incoming share link:', err);
+  }
+}
+
+window.addEventListener('hashchange', checkIncomingShare);
+window.addEventListener('DOMContentLoaded', checkIncomingShare);
+checkIncomingShare();
+
+// Receiver action buttons
+document.getElementById('btn-open-all-incoming').addEventListener('click', () => {
+  if (!currentIncomingTabs.length) return;
+  currentIncomingTabs.forEach(t => {
+    window.open(t.url, '_blank', 'noopener,noreferrer');
+  });
+});
+
+document.getElementById('btn-copy-incoming').addEventListener('click', async () => {
+  if (!currentIncomingTabs.length) return;
+  const urls = currentIncomingTabs.map(t => t.url).join('\n');
+  await navigator.clipboard.writeText(urls);
+  const btn = document.getElementById('btn-copy-incoming');
+  btn.textContent = 'Copied!';
+  setTimeout(() => { btn.textContent = '📋 Copy URLs'; }, 2000);
+});
+
+document.getElementById('btn-dismiss-incoming').addEventListener('click', () => {
+  document.getElementById('p2p-receiver-section').style.display = 'none';
+  history.replaceState(null, '', window.location.pathname);
+});
+
+// Interactive P2P Generator Lab
+let latestShareUrl = '';
+document.getElementById('btn-generate-p2p').addEventListener('click', async () => {
+  const name = document.getElementById('p2p-input-name').value.trim() || 'Shared Workspace';
+  const lines = document.getElementById('p2p-input-tabs').value.split('\n').filter(l => l.trim());
+  const tabs = lines.map(line => {
+    const parts = line.split('|').map(s => s.trim());
+    return {
+      url: parts[0],
+      title: parts[1] || parts[0]
+    };
+  });
+
+  if (tabs.length === 0) {
+    alert('Please enter at least one tab URL.');
+    return;
+  }
+
+  const pkg = await create_p2p_share_link(
+    { name, tabs, created_at: new Date().toISOString() },
+    { baseUrl: window.location.href.split('#')[0] }
+  );
+
+  latestShareUrl = pkg.url;
+  document.getElementById('p2p-share-url-result').value = pkg.url;
+  const qrContainer = document.getElementById('p2p-portal-qr');
+  if (pkg.qrSvg) {
+    qrContainer.innerHTML = pkg.qrSvg;
+  } else {
+    qrContainer.innerHTML = '<span style="color:#64748b; font-size:12px;">Payload too large for QR. Use link.</span>';
+  }
+
+  const savedPct = Math.round((1 - (pkg.compressedBytes / Math.max(pkg.originalBytes, 1))) * 100);
+  document.getElementById('p2p-stats-badge').textContent = `${pkg.tabCount} tabs | Original: ${pkg.originalBytes}B -> Gzip: ${pkg.compressedBytes}B (-${savedPct}%) | AES-256-GCM`;
+
+  document.getElementById('btn-copy-p2p-url').disabled = false;
+  document.getElementById('btn-test-open-p2p').disabled = false;
+});
+
+document.getElementById('btn-copy-p2p-url').addEventListener('click', async () => {
+  if (!latestShareUrl) return;
+  await navigator.clipboard.writeText(latestShareUrl);
+  const btn = document.getElementById('btn-copy-p2p-url');
+  btn.textContent = 'Copied!';
+  setTimeout(() => { btn.textContent = 'Copy Share URL'; }, 2000);
+});
+
+document.getElementById('btn-test-open-p2p').addEventListener('click', () => {
+  if (!latestShareUrl) return;
+  window.location.hash = latestShareUrl.slice(latestShareUrl.indexOf('#'));
+});
+</script>
+
 </body>
 </html>

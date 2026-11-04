@@ -14,6 +14,7 @@ import {
 import { is_restorable_url, get_url_status } from '../common/urls.js';
 import { LocalTabEmbedder, calculate_cosine_similarity, kmeans_cluster } from '../common/embedder.js';
 import { sync_to_drive, download_from_drive } from '../common/sync.js';
+import { create_p2p_share_link } from '../common/p2p_share.js';
 
 const VERIFIER_STRING = 'aegis-verification-string';
 
@@ -2256,6 +2257,65 @@ async function persist_ai_summary(group_id, summary, group_data) {
   await save_tab_groups(active_username, groups);
 }
 
+
+// show air-gapped P2P share modal with QR code and zero-knowledge link
+function show_p2p_share_modal(share_pkg) {
+  const modal = document.getElementById('p2p-share-modal');
+  if (!modal) return;
+  const qr_container = document.getElementById('p2p-qr-container');
+  const link_input = document.getElementById('p2p-share-link-input');
+  const summary_el = document.getElementById('p2p-share-summary');
+  const copy_btn = document.getElementById('p2p-copy-link-btn');
+
+  if (summary_el) {
+    const savedPct = Math.round((1 - (share_pkg.compressedBytes / Math.max(share_pkg.originalBytes, 1))) * 100);
+    summary_el.textContent = `${share_pkg.tabCount} tab${share_pkg.tabCount > 1 ? 's' : ''} • AES-256-GCM • Gzip compressed (${share_pkg.compressedBytes} bytes${savedPct > 0 ? ', ' + savedPct + '% reduction' : ''})`;
+  }
+
+  if (qr_container) {
+    if (share_pkg.qrSvg) {
+      qr_container.innerHTML = share_pkg.qrSvg;
+    } else {
+      qr_container.innerHTML = '<span style="color:#666;font-size:12px;">Payload exceeds single QR size. Use link below.</span>';
+    }
+  }
+
+  if (link_input) {
+    link_input.value = share_pkg.url;
+  }
+
+  modal.classList.remove('hidden');
+  modal.style.display = 'flex';
+
+  if (copy_btn) {
+    copy_btn.textContent = 'Copy Link';
+    copy_btn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(share_pkg.url);
+        copy_btn.textContent = 'Copied!';
+        show_toast('Air-gapped share link copied to clipboard.', 'success');
+        setTimeout(() => { copy_btn.textContent = 'Copy Link'; }, 2000);
+      } catch (_) {
+        link_input.select();
+        document.execCommand('copy');
+        copy_btn.textContent = 'Copied!';
+        show_toast('Air-gapped share link copied to clipboard.', 'success');
+        setTimeout(() => { copy_btn.textContent = 'Copy Link'; }, 2000);
+      }
+    };
+  }
+
+  const close_modal = () => {
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
+  };
+
+  const close_btn = document.getElementById('p2p-share-close-btn');
+  const done_btn = document.getElementById('p2p-share-done-btn');
+  if (close_btn) close_btn.onclick = close_modal;
+  if (done_btn) done_btn.onclick = close_modal;
+}
+
 function create_group_element(group_id, group_data, group_index = 0, envelope = null) {
   const group_element = document.createElement('div');
   group_element.className = 'group-card';
@@ -2287,6 +2347,7 @@ function create_group_element(group_id, group_data, group_index = 0, envelope = 
     '<button class="restore-button secondary-button">Restore All</button>' +
     '<button class="restore-private-button private-restore-button">Incognito</button>' + // Clearer intent
     '<button class="export-urls-button secondary-button">Export URLs</button>' +
+    '<button class="share-p2p-button secondary-button" title="Air-gapped serverless E2EE share & QR code">⚡ Share P2P</button>' +
     '<button class="delete-button">Delete Group</button>'; // Clearer intent
 
   header.appendChild(title_el);
@@ -2522,6 +2583,35 @@ function create_group_element(group_id, group_data, group_index = 0, envelope = 
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   });
+
+  
+  const share_btn = group_element.querySelector('.share-p2p-button');
+  if (share_btn) {
+    share_btn.addEventListener('click', async () => {
+      share_btn.disabled = true;
+      share_btn.textContent = 'Generating...';
+      try {
+        const workspace_payload = {
+          name: group_data.name || display_name,
+          tabs: group_data.tabs.map(t => ({
+            url: t.url,
+            title: t.title,
+            favIconUrl: t.fav_icon_url || ''
+          })),
+          created_at: group_data.date || new Date().toISOString(),
+          is_burner: Boolean(envelope && (envelope.is_burner || envelope.burn_on_restore)),
+          expires_at: envelope?.expires_at || null
+        };
+        const share_pkg = await create_p2p_share_link(workspace_payload);
+        show_p2p_share_modal(share_pkg);
+      } catch (err) {
+        show_toast('P2P Share failed: ' + (err?.message || err), 'error');
+      } finally {
+        share_btn.disabled = false;
+        share_btn.textContent = '⚡ Share P2P';
+      }
+    });
+  }
 
   group_element.querySelector('.delete-button').addEventListener('click', () => {
     soft_delete_group(group_element, group_id);
