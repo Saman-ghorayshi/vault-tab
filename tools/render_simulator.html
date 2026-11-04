@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VaultTab Studio Mockup Simulator</title>
+<style>
+  :root {
+    --bg-window: #090d16;
+    --bg-header: #0d1322;
+    --bg-surface: #111a2e;
+    --bg-surface-elevated: #16223b;
+    --border: #1f2c47;
+    --border-bright: #38bdf8;
+    --text: #f8fafc;
+    --text-muted: #94a3b8;
+    --text-dim: #64748b;
+    --cyan: #38bdf8;
+    --cyan-dim: rgba(56, 189, 248, 0.12);
+    --emerald: #10b981;
+    --emerald-dim: rgba(16, 185, 129, 0.15);
+    --amber: #fbbf24;
+    --amber-dim: rgba(251, 191, 36, 0.15);
+    --purple: #c084fc;
+    --purple-dim: rgba(192, 132, 252, 0.15);
+    --danger: #ef4444;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 960px;
+    height: 580px;
+    overflow: hidden;
+    background: #03060b;
+    font-family: var(--font-sans);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+  }
+
+  /* Browser Window Mockup */
+  .browser-window {
+    width: 940px;
+    height: 560px;
+    background: var(--bg-window);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(56, 189, 248, 0.15);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Browser Topbar / Tabs Bar */
+  .chrome-topbar {
+    background: var(--bg-header);
+    height: 42px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--border);
+    gap: 12px;
+    user-select: none;
+  }
+  .window-controls {
+    display: flex;
+    gap: 7px;
+    align-items: center;
+    padding-right: 6px;
+  }
+  .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .dot-red { background: #ef4444; box-shadow: 0 0 6px rgba(239, 68, 68, 0.4); }
+  .dot-yellow { background: #f59e0b; box-shadow: 0 0 6px rgba(245, 158, 11, 0.4); }
+  .dot-green { background: #10b981; box-shadow: 0 0 6px rgba(16, 185, 129, 0.4); }
+
+  .tab-strip {
+    display: flex;
+    gap: 4px;
+    align-items: flex-end;
+    flex: 1;
+    overflow: hidden;
+    height: 100%;
+    padding-top: 6px;
+  }
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 12px;
+    border-radius: 8px 8px 0 0;
+    font-size: 11px;
+    font-weight: 500;
+    max-width: 130px;
+    min-width: 90px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-muted);
+    border: 1px solid transparent;
+    border-bottom: none;
+    cursor: default;
+    position: relative;
+  }
+  .tab.active {
+    background: var(--bg-window);
+    color: #fff;
+    border-color: var(--border);
+    border-bottom: 1px solid var(--bg-window);
+    font-weight: 600;
+  }
+  .tab-icon { font-size: 11px; flex-shrink: 0; }
+  .tab-title { overflow: hidden; text-overflow: ellipsis; }
+  .tab-close { margin-left: auto; font-size: 10px; color: var(--text-dim); }
+
+  /* Navigation Bar */
+  .chrome-nav {
+    background: var(--bg-window);
+    height: 38px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-btn {
+    color: var(--text-dim);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    cursor: default;
+  }
+  .omnibox {
+    flex: 1;
+    height: 26px;
+    background: #04070e;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .omnibox .ssl-lock { color: var(--emerald); font-size: 10px; }
+  .omnibox .url-host { color: #fff; font-weight: 600; }
+  .omnibox .url-path { color: var(--text-dim); }
+
+  .browser-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .ram-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+  }
+  .ram-badge.freed {
+    background: var(--emerald-dim);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: var(--emerald);
+  }
+  .extension-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    cursor: default;
+    position: relative;
+  }
+  .extension-icon.vault-hover {
+    border-color: var(--cyan);
+    background: var(--cyan-dim);
+  }
+  .extension-icon.vault-active {
+    background: var(--cyan-dim);
+    border-color: var(--cyan);
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.45);
+  }
+  .extension-icon svg { width: 14px; height: 14px; }
+
+  /* Viewport Content */
+  .viewport {
+    flex: 1;
+    background: #060911;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Screen 1 & 2: Active Webpage (Raydium Swap Mockup) */
+  .webpage-mock {
+    flex: 1;
+    padding: 24px 32px;
+    display: flex;
+    flex-direction: column;
+    background: radial-gradient(circle at 80% 20%, rgba(192, 132, 252, 0.05), transparent 50%),
+                radial-gradient(circle at 20% 80%, rgba(56, 189, 248, 0.05), transparent 50%), #060911;
+  }
+  .mock-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+  }
+  .mock-brand {
+    font-weight: 800;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #fff;
+  }
+  .mock-brand-badge {
+    background: linear-gradient(135deg, #a855f7, #6366f1);
+    color: #fff;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+  }
+  .mock-swap-card {
+    width: 400px;
+    margin: 10px auto;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  }
+  .mock-swap-head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 14px;
+    color: var(--text);
+  }
+  .mock-token-row {
+    background: #090e1a;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .mock-token-info { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px; }
+  .mock-token-icon { width: 22px; height: 22px; border-radius: 50%; }
+  .mock-token-val { font-family: var(--font-mono); font-size: 15px; font-weight: 700; color: #fff; }
+
+  /* Extension Popup (Drop-down) */
+  .vault-popup-overlay {
+    position: absolute;
+    top: 4px;
+    right: 12px;
+    width: 320px;
+    background: #0c1220;
+    border: 1px solid var(--cyan);
+    border-radius: 10px;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.85), 0 0 20px rgba(56, 189, 248, 0.25);
+    z-index: 100;
+    padding: 16px;
+    font-family: var(--font-sans);
+  }
+  .popup-brand {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+  }
+  .popup-brand-title {
+    font-size: 13px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #fff;
+  }
+  .popup-badge-sec {
+    font-size: 9px;
+    background: var(--emerald-dim);
+    border: 1px solid var(--emerald);
+    color: var(--emerald);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-weight: 700;
+  }
+  .popup-status-box {
+    background: #060911;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .popup-status-box strong { color: var(--text); }
+  .popup-btn-primary {
+    width: 100%;
+    background: var(--cyan);
+    color: #040812;
+    border: none;
+    border-radius: 6px;
+    padding: 10px;
+    font-weight: 700;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: default;
+    margin-bottom: 8px;
+    box-shadow: 0 4px 12px rgba(56, 189, 248, 0.35);
+  }
+  .popup-btn-primary.hover-btn {
+    background: #7dd3fc;
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.6);
+  }
+  .popup-btn-primary.encrypting {
+    background: linear-gradient(90deg, #0284c7, #38bdf8);
+    color: #fff;
+  }
+  .popup-btn-secondary {
+    width: 100%;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: default;
+  }
+
+  /* Screen 4 & 5: VaultTab Manager Dashboard */
+  .manager-view {
+    flex: 1;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    background: #080c16;
+    overflow-y: auto;
+  }
+  .manager-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .manager-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .manager-h1 { font-size: 18px; font-weight: 800; color: #fff; }
+  .manager-badge {
+    background: var(--cyan-dim);
+    color: var(--cyan);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    font-size: 10px;
+    font-family: var(--font-mono);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+  }
+  .manager-search-bar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .manager-search-input {
+    flex: 1;
+    background: #04070e;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: #fff;
+    font-family: var(--font-mono);
+  }
+  .manager-search-input.active-input {
+    border-color: var(--cyan);
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+  }
+  .semantic-toggle-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(192, 132, 252, 0.12);
+    border: 1px solid rgba(192, 132, 252, 0.3);
+    color: var(--purple);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-weight: 700;
+  }
+
+  /* Tab Groups Grid / Cards */
+  .groups-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .session-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .session-card.highlighted {
+    border-color: var(--cyan);
+    background: #111e38;
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.15);
+  }
+  .card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .session-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .cipher-pill {
+    font-size: 9px;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--emerald);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .card-tabs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-left: 12px;
+    border-left: 2px solid var(--border);
+  }
+  .tab-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .tab-row strong { color: var(--text); }
+  .match-score {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--purple);
+    background: var(--purple-dim);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+  }
+  .card-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+  .btn-sm-primary {
+    background: var(--cyan);
+    color: #04070e;
+    border: none;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: default;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .btn-sm-sec {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    font-size: 11px;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: default;
+  }
+
+  /* Hardware Passkey / WebAuthn Modal */
+  .modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(3, 6, 11, 0.85);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+  }
+  .passkey-modal {
+    width: 360px;
+    background: #0f172a;
+    border: 1px solid var(--cyan);
+    border-radius: 12px;
+    padding: 24px;
+    text-align: center;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9), 0 0 25px rgba(56, 189, 248, 0.3);
+  }
+  .fingerprint-icon {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 14px;
+    border-radius: 50%;
+    background: var(--cyan-dim);
+    border: 2px solid var(--cyan);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+  }
+  .fingerprint-icon.verified {
+    border-color: var(--emerald);
+    background: var(--emerald-dim);
+    box-shadow: 0 0 25px rgba(16, 185, 129, 0.5);
+  }
+  .fingerprint-icon svg { width: 28px; height: 28px; }
+  .modal-title { font-size: 15px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+  .modal-desc { font-size: 11px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5; }
+  .modal-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    background: var(--emerald-dim);
+    border: 1px solid var(--emerald);
+    color: var(--emerald);
+  }
+
+  /* Floating Toast */
+  .toast-banner {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.96);
+    border: 1px solid var(--emerald);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6), 0 0 15px rgba(16, 185, 129, 0.3);
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 150;
+    white-space: nowrap;
+  }
+  .toast-banner svg { width: 14px; height: 14px; color: var(--emerald); }
+
+  /* Animated Simulated Cursor */
+  .virtual-cursor {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    z-index: 9999;
+    pointer-events: none;
+    transition: all 0.3s ease;
+  }
+  .virtual-cursor svg {
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
+  }
+</style>
+</head>
+<body>
+
+<div class="browser-window" id="window">
+  <!-- Top Tab Bar -->
+  <div class="chrome-topbar">
+    <div class="window-controls">
+      <div class="dot dot-red"></div>
+      <div class="dot dot-yellow"></div>
+      <div class="dot dot-green"></div>
+    </div>
+    <div class="tab-strip" id="tab-strip"></div>
+  </div>
+
+  <!-- Navigation Bar -->
+  <div class="chrome-nav">
+    <div class="nav-btn">←</div>
+    <div class="nav-btn">→</div>
+    <div class="nav-btn">↻</div>
+    <div class="omnibox">
+      <span class="ssl-lock">🔒</span>
+      <span id="url-text"></span>
+    </div>
+    <div class="browser-actions">
+      <div class="ram-badge" id="ram-badge">
+        <span>⚠️ RAM: 2,140 MB</span>
+      </div>
+      <div class="extension-icon" id="ext-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <path d="M9 12l2 2 4-4" stroke="#38bdf8" stroke-width="2.5"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Viewport -->
+  <div class="viewport" id="viewport"></div>
+</div>
+
+<!-- Virtual Cursor -->
+<div class="virtual-cursor" id="cursor">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="#ffffff" stroke="#000000" stroke-width="1.5">
+    <path d="M3 3l7 18 3-7 7-3L3 3z"/>
+  </svg>
+</div>
+
+<script>
+  const params = new URLSearchParams(window.location.search);
+  const step = params.get('step') || '1';
+
+  const tabStrip = document.getElementById('tab-strip');
+  const urlText = document.getElementById('url-text');
+  const ramBadge = document.getElementById('ram-badge');
+  const extIcon = document.getElementById('ext-icon');
+  const viewport = document.getElementById('viewport');
+  const cursor = document.getElementById('cursor');
+
+  function renderTabs(mode) {
+    if (mode === 'many') {
+      tabStrip.innerHTML = `
+        <div class="tab active">
+          <span class="tab-icon">🟣</span>
+          <span class="tab-title">Raydium AMM Swap</span>
+          <span class="tab-close">×</span>
+        </div>
+        <div class="tab">
+          <span class="tab-icon">🟢</span>
+          <span class="tab-title">Solana Devnet Explorer</span>
+          <span class="tab-close">×</span>
+        </div>
+        <div class="tab">
+          <span class="tab-icon">🟡</span>
+          <span class="tab-title">CoinGecko SOL/USD</span>
+          <span class="tab-close">×</span>
+        </div>
+        <div class="tab">
+          <span class="tab-icon">🦀</span>
+          <span class="tab-title">Rust Tokio Mutex</span>
+          <span class="tab-close">×</span>
+        </div>
+        <div class="tab">
+          <span class="tab-icon">📜</span>
+          <span class="tab-title">ArXiv ZK-Rollups</span>
+          <span class="tab-close">×</span>
+        </div>
+        <div class="tab">
+          <span class="tab-icon">🐙</span>
+          <span class="tab-title">GitHub solana-labs</span>
+          <span class="tab-close">×</span>
+        </div>
+      `;
+    } else if (mode === 'manager') {
+      tabStrip.innerHTML = `
+        <div class="tab active">
+          <span class="tab-icon">🛡️</span>
+          <span class="tab-title">VaultTab Manager</span>
+          <span class="tab-close">×</span>
+        </div>
+      `;
+    } else if (mode === 'restored') {
+      tabStrip.innerHTML = `
+        <div class="tab active">
+          <span class="tab-icon">🟣</span>
+          <span class="tab-title">Raydium AMM Swap</span>
+          <span class="tab-close">×</span>
+        </div>
+        <div class="tab">
+          <span class="tab-icon">🟢</span>
+          <span class="tab-title">Solana Devnet Explorer</span>
+          <span class="tab-close">×</span>
+        </div>
+        <div class="tab">
+          <span class="tab-icon">🟡</span>
+          <span class="tab-title">CoinGecko SOL/USD</span>
+          <span class="tab-close">×</span>
+        </div>
+        <div class="tab">
+          <span class="tab-icon">🛡️</span>
+          <span class="tab-title">VaultTab Manager</span>
+          <span class="tab-close">×</span>
+        </div>
+      `;
+    }
+  }
+
+  function getRaydiumMockHTML() {
+    return `
+      <div class="webpage-mock">
+        <div class="mock-header">
+          <div class="mock-brand">
+            <span style="font-size:20px;">🟣</span> Raydium DEX <span class="mock-brand-badge">SOLANA MAINNET</span>
+          </div>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">
+            RPC: <strong>Fastest (18ms)</strong> · Slippage: 0.1%
+          </div>
+        </div>
+        <div class="mock-swap-card">
+          <div class="mock-swap-head">
+            <span>Swap Tokens</span>
+            <span style="color:var(--cyan);font-family:var(--font-mono);font-size:11px;">⚡ Concentrated Liquidity (CPMM)</span>
+          </div>
+          <div class="mock-token-row">
+            <div class="mock-token-info">
+              <span style="font-size:18px;">◎</span>
+              <div>
+                <div>SOL</div>
+                <div style="font-size:10px;color:var(--text-dim);font-weight:normal">Solana Native</div>
+              </div>
+            </div>
+            <div class="mock-token-val">25.0</div>
+          </div>
+          <div style="text-align:center;color:var(--text-dim);margin:-4px 0 4px;font-size:12px;">↓</div>
+          <div class="mock-token-row">
+            <div class="mock-token-info">
+              <span style="font-size:18px;">💵</span>
+              <div>
+                <div>USDC</div>
+                <div style="font-size:10px;color:var(--text-dim);font-weight:normal">USD Coin</div>
+              </div>
+            </div>
+            <div class="mock-token-val">4,825.50</div>
+          </div>
+          <button style="width:100%;margin-top:12px;background:linear-gradient(135deg,#a855f7,#6366f1);color:#fff;border:none;padding:10px;border-radius:6px;font-weight:700;font-size:12px;cursor:default;">
+            Swap 25 SOL for 4,825.50 USDC
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  // 1: Cluttered tabs, high memory, cursor idle
+  if (step === '1') {
+    renderTabs('many');
+    urlText.innerHTML = '<span class="url-host">raydium.io</span><span class="url-path">/swap?inputMint=sol&outputMint=usdc</span>';
+    ramBadge.innerHTML = '⚠️ RAM: 2,140 MB (6 tabs)';
+    ramBadge.className = 'ram-badge';
+    extIcon.className = 'extension-icon';
+    viewport.innerHTML = getRaydiumMockHTML();
+    cursor.style.top = '280px';
+    cursor.style.left = '480px';
+  }
+
+  // 1b: Cursor approaches and hovers extension icon
+  else if (step === '1b') {
+    renderTabs('many');
+    urlText.innerHTML = '<span class="url-host">raydium.io</span><span class="url-path">/swap?inputMint=sol&outputMint=usdc</span>';
+    ramBadge.innerHTML = '⚠️ RAM: 2,140 MB (6 tabs)';
+    ramBadge.className = 'ram-badge';
+    extIcon.className = 'extension-icon vault-hover';
+    viewport.innerHTML = getRaydiumMockHTML();
+    cursor.style.top = '66px';
+    cursor.style.left = '905px';
+  }
+
+  // 2: Popup open, cursor over Encrypt & Stash
+  else if (step === '2') {
+    renderTabs('many');
+    urlText.innerHTML = '<span class="url-host">raydium.io</span><span class="url-path">/swap</span>';
+    ramBadge.innerHTML = '⚠️ RAM: 2,140 MB (6 tabs)';
+    extIcon.className = 'extension-icon vault-active';
+    viewport.innerHTML = getRaydiumMockHTML() + `
+      <div class="vault-popup-overlay">
+        <div class="popup-brand">
+          <div class="popup-brand-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            VaultTab <span style="color:var(--text-dim);font-weight:normal;font-size:11px">v2.3.0</span>
+          </div>
+          <div class="popup-badge-sec">Zero-Knowledge</div>
+        </div>
+        <div class="popup-status-box">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span>User: <strong>saman</strong></span>
+            <span style="color:var(--emerald);font-family:var(--font-mono)">● Key Active</span>
+          </div>
+          <div>Stash target: <strong>6 Active Tabs (2,140 MB)</strong></div>
+        </div>
+        <button class="popup-btn-primary hover-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Encrypt &amp; Stash All Tabs
+        </button>
+        <button class="popup-btn-secondary">Open Vault Manager</button>
+      </div>
+    `;
+    cursor.style.top = '175px';
+    cursor.style.left = '780px';
+  }
+
+  // 3a: Encrypting progress (PBKDF2)
+  else if (step === '3a') {
+    renderTabs('many');
+    urlText.innerHTML = '<span class="url-host">raydium.io</span><span class="url-path">/swap</span>';
+    ramBadge.innerHTML = '⚡ Deriving Key...';
+    ramBadge.className = 'ram-badge';
+    extIcon.className = 'extension-icon vault-active';
+    viewport.innerHTML = getRaydiumMockHTML() + `
+      <div class="vault-popup-overlay" style="border-color:var(--amber);box-shadow:0 0 20px rgba(251,191,36,0.3);">
+        <div class="popup-brand">
+          <div class="popup-brand-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            VaultTab <span style="color:var(--amber);font-size:11px">Key Derivation</span>
+          </div>
+          <div class="popup-badge-sec" style="color:var(--amber);border-color:var(--amber)">PBKDF2</div>
+        </div>
+        <div class="popup-status-box" style="font-family:var(--font-mono);font-size:10px;line-height:1.6">
+          <div style="color:var(--amber)">[1/2] PBKDF2-HMAC-SHA256: 600,000 iters (68ms)</div>
+          <div style="color:var(--text-dim)">[2/2] AES-256-GCM Streaming Cipher...</div>
+        </div>
+        <button class="popup-btn-primary encrypting">
+          🔐 Deriving Master Key...
+        </button>
+      </div>
+    `;
+    cursor.style.top = '175px';
+    cursor.style.left = '780px';
+  }
+
+  // 3b: AES-256-GCM encrypted + Toast
+  else if (step === '3b') {
+    renderTabs('many');
+    urlText.innerHTML = '<span class="url-host">raydium.io</span><span class="url-path">/swap</span>';
+    ramBadge.innerHTML = '✨ Zero-Knowledge';
+    ramBadge.className = 'ram-badge freed';
+    extIcon.className = 'extension-icon vault-active';
+    viewport.innerHTML = getRaydiumMockHTML() + `
+      <div class="vault-popup-overlay" style="border-color:var(--emerald);box-shadow:0 0 25px rgba(16,185,129,0.35);">
+        <div class="popup-brand">
+          <div class="popup-brand-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            VaultTab <span style="color:var(--emerald);font-size:11px">Secured</span>
+          </div>
+          <div class="popup-badge-sec" style="color:var(--emerald);border-color:var(--emerald)">128-bit MAC</div>
+        </div>
+        <div class="popup-status-box" style="font-family:var(--font-mono);font-size:10px;line-height:1.6">
+          <div style="color:var(--emerald)">✓ PBKDF2 Derived (256 bits)</div>
+          <div style="color:var(--cyan)">✓ AES-GCM IV: 96-bit CSPRNG Random</div>
+          <div style="color:var(--emerald)">✓ MAC: 8e2a...7c91 (Authenticated)</div>
+        </div>
+        <button class="popup-btn-primary" style="background:var(--emerald);color:#04070e;">
+          ✓ Stashed &amp; Closing Tabs...
+        </button>
+      </div>
+      <div class="toast-banner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+        6 Tabs Encrypted &amp; Stashed · Memory Freed: 2,116 MB
+      </div>
+    `;
+    cursor.style.top = '175px';
+    cursor.style.left = '780px';
+  }
+
+  // 4: Manager dashboard opened (RAM freed!)
+  else if (step === '4') {
+    renderTabs('manager');
+    urlText.innerHTML = '<span class="url-host">chrome-extension://vault-tab</span><span class="url-path">/manager_page/manager.html</span>';
+    ramBadge.innerHTML = '✨ RAM: 24 MB (-98.8%)';
+    ramBadge.className = 'ram-badge freed';
+    extIcon.className = 'extension-icon';
+
+    viewport.innerHTML = `
+      <div class="manager-view">
+        <div class="manager-head">
+          <div class="manager-title-row">
+            <div class="manager-h1">VaultTab Manager</div>
+            <div class="manager-badge">ZERO-KNOWLEDGE VAULT</div>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">
+            Signed in as <strong>saman</strong> · Hardware Key Registered
+          </div>
+        </div>
+        <div class="manager-search-bar">
+          <input type="text" class="manager-search-input" value="" placeholder="Search tabs... (e.g. domain:solana title:defi or full semantic phrase)" readonly />
+          <div class="semantic-toggle-badge" style="opacity:0.6">
+            <span>⚡ Word2Vec Semantic: OFF</span>
+          </div>
+        </div>
+        <div class="groups-grid">
+          <div class="session-card">
+            <div class="card-top">
+              <div class="session-title">
+                <span>🗃️</span> Solana Research &amp; AMM Pools
+                <span class="cipher-pill">AES-256-GCM · 6 Tabs</span>
+              </div>
+              <div style="font-size:10px;color:var(--text-dim);font-family:var(--font-mono)">Just now</div>
+            </div>
+            <div class="card-tabs-list">
+              <div class="tab-row">
+                <span>🟣 Raydium | Concentrated Liquidity AMM Swap</span>
+                <span style="color:var(--cyan);font-family:var(--font-mono);font-size:10px">raydium.io</span>
+              </div>
+              <div class="tab-row">
+                <span>🟢 Solana Devnet Explorer &amp; RPC Health</span>
+                <span style="color:var(--cyan);font-family:var(--font-mono);font-size:10px">explorer.solana.com</span>
+              </div>
+              <div class="tab-row">
+                <span>🟡 CoinGecko: SOL / USD Market Realtime</span>
+                <span style="color:var(--cyan);font-family:var(--font-mono);font-size:10px">coingecko.com</span>
+              </div>
+            </div>
+            <div class="card-actions">
+              <button class="btn-sm-primary">Restore Group</button>
+              <button class="btn-sm-sec">Copy URLs</button>
+            </div>
+          </div>
+
+          <div class="session-card" style="opacity:0.75">
+            <div class="card-top">
+              <div class="session-title">
+                <span>🗃️</span> Zero-Knowledge Succinct Proofs &amp; Circom
+                <span class="cipher-pill">AES-256-GCM · 8 Tabs</span>
+              </div>
+              <div style="font-size:10px;color:var(--text-dim);font-family:var(--font-mono)">2 hours ago</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    cursor.style.top = '125px';
+    cursor.style.left = '360px';
+  }
+
+  // 5a: User typing query in search bar: "liquidity"
+  else if (step === '5a') {
+    renderTabs('manager');
+    urlText.innerHTML = '<span class="url-host">chrome-extension://vault-tab</span><span class="url-path">/manager_page/manager.html</span>';
+    ramBadge.innerHTML = '✨ RAM: 24 MB (-98.8%)';
+    ramBadge.className = 'ram-badge freed';
+
+    viewport.innerHTML = `
+      <div class="manager-view">
+        <div class="manager-head">
+          <div class="manager-title-row">
+            <div class="manager-h1">VaultTab Manager</div>
+            <div class="manager-badge">ZERO-KNOWLEDGE VAULT</div>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">
+            Word2Vec Semantic Model Ready
+          </div>
+        </div>
+        <div class="manager-search-bar">
+          <input type="text" class="manager-search-input active-input" value="liquidity|" readonly />
+          <div class="semantic-toggle-badge" style="border-color:var(--purple);background:rgba(192,132,252,0.22);color:#fff">
+            <span>⚡ Word2Vec Semantic: ON</span>
+          </div>
+        </div>
+        <div class="groups-grid">
+          <div class="session-card">
+            <div class="card-top">
+              <div class="session-title">
+                <span>🗃️</span> Solana Research &amp; AMM Pools
+                <span class="cipher-pill">AES-256-GCM · 6 Tabs</span>
+              </div>
+            </div>
+            <div class="card-tabs-list">
+              <div class="tab-row">
+                <span>🟣 <strong>Raydium | Concentrated Liquidity AMM Swap</strong></span>
+                <span class="match-score">Cosine: 0.94</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    cursor.style.top = '126px';
+    cursor.style.left = '210px';
+  }
+
+  // 5b: Full query "liquidity pool swap" + 3 Vector-Ranked Matches
+  else if (step === '5b') {
+    renderTabs('manager');
+    urlText.innerHTML = '<span class="url-host">chrome-extension://vault-tab</span><span class="url-path">/manager_page/manager.html</span>';
+    ramBadge.innerHTML = '✨ RAM: 24 MB (-98.8%)';
+    ramBadge.className = 'ram-badge freed';
+
+    viewport.innerHTML = `
+      <div class="manager-view">
+        <div class="manager-head">
+          <div class="manager-title-row">
+            <div class="manager-h1">VaultTab Manager</div>
+            <div class="manager-badge">ZERO-KNOWLEDGE VAULT</div>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">
+            Neural Embeddings: 3 Hits Ranked
+          </div>
+        </div>
+        <div class="manager-search-bar">
+          <input type="text" class="manager-search-input active-input" value="liquidity pool swap" readonly />
+          <div class="semantic-toggle-badge" style="border-color:var(--purple);background:rgba(192,132,252,0.22);color:#fff">
+            <span>⚡ Word2Vec Semantic: ON</span>
+          </div>
+        </div>
+        <div class="groups-grid">
+          <div class="session-card highlighted">
+            <div class="card-top">
+              <div class="session-title">
+                <span>🎯</span> Neural Matches in: <strong>Solana Research &amp; AMM Pools</strong>
+                <span class="cipher-pill" style="background:var(--purple-dim);color:var(--purple);border-color:var(--purple)">Vector Ranked</span>
+              </div>
+              <div style="font-size:10px;color:var(--purple);font-family:var(--font-mono);font-weight:700">3 Top Matches</div>
+            </div>
+            <div class="card-tabs-list">
+              <div class="tab-row">
+                <span>🟣 <strong>Raydium | Concentrated Liquidity AMM Swap</strong></span>
+                <span class="match-score">Cosine Similarity: 0.96</span>
+              </div>
+              <div class="tab-row">
+                <span>🟢 <strong>Solana Devnet Explorer &amp; Liquidity Pools</strong></span>
+                <span class="match-score">Cosine Similarity: 0.91</span>
+              </div>
+              <div class="tab-row">
+                <span>🟡 <strong>CoinGecko: SOL / USD Market Depth</strong></span>
+                <span class="match-score">Cosine Similarity: 0.85</span>
+              </div>
+            </div>
+            <div class="card-actions">
+              <button class="btn-sm-primary" style="background:var(--purple);color:#fff;box-shadow:0 0 14px rgba(192,132,252,0.5)">
+                🔓 Decrypt &amp; Restore Matches (3 Tabs)
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    cursor.style.top = '325px';
+    cursor.style.left = '760px';
+  }
+
+  // 6a: WebAuthn hardware passkey prompt
+  else if (step === '6a') {
+    renderTabs('manager');
+    urlText.innerHTML = '<span class="url-host">chrome-extension://vault-tab</span><span class="url-path">/manager_page/manager.html</span>';
+    ramBadge.innerHTML = '✨ RAM: 24 MB (-98.8%)';
+    ramBadge.className = 'ram-badge freed';
+
+    viewport.innerHTML = `
+      <div class="manager-view" style="filter:blur(2px)">
+        <div class="manager-h1" style="margin-bottom:20px">VaultTab Manager</div>
+      </div>
+      <div class="modal-overlay">
+        <div class="passkey-modal">
+          <div class="fingerprint-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04A12.001 12.001 0 0 1 12 3c7.2 0 12 5.8 12 13 0 2.228-.616 4.312-1.688 6.096M12 7v4m0 4h.01"/></svg>
+          </div>
+          <div class="modal-title">Touch Security Key / Passkey</div>
+          <div class="modal-desc">
+            Awaiting hardware assertion (YubiKey / Windows Hello / Touch ID)...<br>
+            Decrypting AES-256 session key in memory
+          </div>
+          <div class="modal-status-badge" style="background:var(--cyan-dim);border-color:var(--cyan);color:var(--cyan)">
+            Waiting for Biometric Touch...
+          </div>
+        </div>
+      </div>
+    `;
+    cursor.style.top = '310px';
+    cursor.style.left = '480px';
+  }
+
+  // 6b: WebAuthn hardware passkey VERIFIED
+  else if (step === '6b') {
+    renderTabs('manager');
+    urlText.innerHTML = '<span class="url-host">chrome-extension://vault-tab</span><span class="url-path">/manager_page/manager.html</span>';
+    ramBadge.innerHTML = '✨ RAM: 24 MB (-98.8%)';
+    ramBadge.className = 'ram-badge freed';
+
+    viewport.innerHTML = `
+      <div class="manager-view" style="filter:blur(2px)">
+        <div class="manager-h1" style="margin-bottom:20px">VaultTab Manager</div>
+      </div>
+      <div class="modal-overlay">
+        <div class="passkey-modal">
+          <div class="fingerprint-icon verified">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04A12.001 12.001 0 0 1 12 3c7.2 0 12 5.8 12 13 0 2.228-.616 4.312-1.688 6.096M12 7v4m0 4h.01"/></svg>
+          </div>
+          <div class="modal-title">Hardware Passkey Verified</div>
+          <div class="modal-desc">
+            ECDSA Secp256r1 signature authenticated.<br>
+            Decrypting AES-256 session key in isolated memory...
+          </div>
+          <div class="modal-status-badge">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+            Zero-Knowledge Hardware Assertion Valid
+          </div>
+        </div>
+      </div>
+    `;
+    cursor.style.top = '310px';
+    cursor.style.left = '480px';
+  }
+
+  // 7: 3 Tabs Restored to browser tab bar + Toast
+  else if (step === '7') {
+    renderTabs('restored');
+    urlText.innerHTML = '<span class="url-host">raydium.io</span><span class="url-path">/swap?inputMint=sol&outputMint=usdc</span>';
+    ramBadge.innerHTML = '● 3 Tabs Active';
+    ramBadge.className = 'ram-badge freed';
+    extIcon.className = 'extension-icon';
+
+    viewport.innerHTML = getRaydiumMockHTML() + `
+      <div class="toast-banner" style="background:#0c1829;border-color:var(--cyan);box-shadow:0 0 20px rgba(56,189,248,0.4)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+        🔓 3 Tabs Decrypted &amp; Restored in 14ms (RAM restored on demand)
+      </div>
+    `;
+    cursor.style.top = '22px';
+    cursor.style.left = '80px';
+  }
+</script>
+</body>
+</html>

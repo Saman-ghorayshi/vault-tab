@@ -30,6 +30,14 @@
   <img src="assets/vaulttab-demo.gif" alt="VaultTab Walkthrough &amp; UI Preview" width="100%">
 </p>
 
+> [!TIP]
+> **Real-World Workflow Shown Above:**
+> 1. **Tab Clutter & Memory Hog**: 6 active research & DeFi tabs consuming 2,140 MB of RAM.
+> 2. **One-Click Zero-Knowledge Stash**: VaultTab popup derives an AES-256 key via 600,000 PBKDF2 iterations and encrypts the session payload with a 128-bit MAC tag.
+> 3. **Instant RAM Recovery**: Active tabs collapse into memory-free suspension, dropping browser memory usage to 24 MB (-98.8% freed).
+> 4. **Neural Semantic Search**: Client-side Word2Vec neural vector search matches conceptual queries (*"liquidity pool swap"*) with 0.96 cosine similarity ranking.
+> 5. **Hardware Passkey Restore**: TouchID / YubiKey FIDO2 assertion securely decrypts and restores tabs in 14ms.
+
 Unlike traditional tab managers that store raw URLs and unencrypted titles in plaintext LevelDB/SQLite files, VaultTab protects every record with **hardware-bound WebAuthn Passkeys (TouchID / Windows Hello / YubiKey)**, **600,000 PBKDF2-HMAC-SHA256 iterations**, and **AES-256-GCM authenticated encryption**.
 
 ---

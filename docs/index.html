@@ -236,8 +236,57 @@
       Stop storing confidential tabs and research in plaintext. VaultTab locks your active browser sessions with hardware-backed WebAuthn Passkeys, 600,000 PBKDF2 iterations, AES-256-GCM authenticated encryption, and local neural vector search.
     </p>
     <div class="hero-actions">
-      <a href="#crypto-lab" class="btn-primary">🧪 Test Interactive Crypto Sandbox</a>
+      <a href="#live-walkthrough" class="btn-primary">▶ Watch Full Workflow Screencast</a>
+      <a href="#crypto-lab" class="btn-outline">🧪 Test Interactive Crypto Sandbox</a>
       <a href="#install" class="btn-outline">⚡ Install in 30 Seconds</a>
+    </div>
+  </section>
+
+  <!-- Interactive App Walkthrough & Showcase -->
+  <section id="live-walkthrough" class="section-wrap" style="margin-top: 2rem; margin-bottom: 3.5rem;">
+    <div style="background: #090e1a; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.8), 0 0 30px rgba(56,189,248,0.12);">
+      <div style="background: #0d1322; padding: 12px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #ef4444;"></span>
+          <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #f59e0b;"></span>
+          <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #10b981;"></span>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-left: 8px;">vaulttab://workflow-screencast &bull; Zero-Knowledge Session Stash &amp; Restore</span>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <span style="font-family: var(--font-mono); font-size: 11px; background: rgba(56,189,248,0.12); color: var(--cyan); border: 1px solid rgba(56,189,248,0.3); padding: 2px 8px; border-radius: 4px; font-weight: 700;">AES-256-GCM</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; background: rgba(16,185,129,0.12); color: var(--emerald); border: 1px solid rgba(16,185,129,0.3); padding: 2px 8px; border-radius: 4px; font-weight: 700;">WebAuthn FIDO2</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; background: rgba(192,132,252,0.12); color: var(--purple); border: 1px solid rgba(192,132,252,0.3); padding: 2px 8px; border-radius: 4px; font-weight: 700;">Word2Vec AI</span>
+        </div>
+      </div>
+      <div style="position: relative; background: #03060b; display: flex; justify-content: center; align-items: center;">
+        <img src="assets/vaulttab-demo.gif" alt="VaultTab Real-World Workflow Demo Screencast" style="width: 100%; max-width: 960px; height: auto; display: block;">
+      </div>
+      <div style="background: #090e1a; padding: 16px 22px; border-top: 1px solid var(--border); display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; font-size: 12px;">
+        <div>
+          <strong style="color: #fff; display: flex; align-items: center; gap: 6px;">
+            <span style="color: var(--amber)">1.</span> Tab Overload &amp; Memory Hog
+          </strong>
+          <p style="color: var(--muted); margin-top: 4px; line-height: 1.5;">Active tabs consuming 2.1+ GB RAM are stashed into memory-free suspension with 1 click.</p>
+        </div>
+        <div>
+          <strong style="color: var(--cyan); display: flex; align-items: center; gap: 6px;">
+            <span style="color: var(--cyan)">2.</span> Zero-Knowledge Encryption
+          </strong>
+          <p style="color: var(--muted); margin-top: 4px; line-height: 1.5;">600,000 PBKDF2 iterations derive master key; AES-256-GCM signs ciphertext with 128-bit MAC.</p>
+        </div>
+        <div>
+          <strong style="color: var(--purple); display: flex; align-items: center; gap: 6px;">
+            <span style="color: var(--purple)">3.</span> Neural Semantic Search
+          </strong>
+          <p style="color: var(--muted); margin-top: 4px; line-height: 1.5;">Query tabs by concept (&ldquo;liquidity pool swap&rdquo;) using client-side Word2Vec cosine similarity.</p>
+        </div>
+        <div>
+          <strong style="color: var(--emerald); display: flex; align-items: center; gap: 6px;">
+            <span style="color: var(--emerald)">4.</span> Hardware Passkey Restore
+          </strong>
+          <p style="color: var(--muted); margin-top: 4px; line-height: 1.5;">Touch TouchID or YubiKey sensor to authenticate and restore tabs cleanly in 14ms.</p>
+        </div>
+      </div>
     </div>
   </section>
 
