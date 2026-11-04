@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/Saman-ghorayshi/vault-tab/actions/workflows/test.yml"><img src="https://github.com/Saman-ghorayshi/vault-tab/actions/workflows/test.yml/badge.svg" alt="CI Build Status"></a>
-  <img src="https://img.shields.io/badge/tests-27%20passing-success?style=flat-square" alt="27 Automated Tests">
+  <img src="https://img.shields.io/badge/tests-46%20passing-success?style=flat-square" alt="46 Automated Tests">
   <img src="https://img.shields.io/badge/node-20%20%7C%2022%20%7C%2024-blue?style=flat-square" alt="Node Supported Matrix">
   <img src="https://img.shields.io/badge/security-AES--256--GCM-10b981?style=flat-square" alt="AES-256-GCM">
   <img src="https://img.shields.io/badge/auth-WebAuthn%20Passkeys-38bdf8?style=flat-square" alt="WebAuthn Passkeys">
@@ -42,6 +42,30 @@ Unlike traditional tab managers that store raw URLs and unencrypted titles in pl
 
 ---
 
+## ⚡ Core Engineering Pillars
+
+### 1. 🔥 Burner Workspaces & Emergency Panic Wipe
+- **Time-To-Live (TTL) Sweeper**: Schedule workspaces to self-destruct after 15m, 1h, or 24h. The service worker background alarm inspects outer metadata and cryptographically shreds expired sessions with zero disk traces.
+- **Burn-on-Restore**: Temporary sessions (e.g., disposable trading tabs or one-off code reviews) are permanently purged from storage the instant they are restored into browser tabs.
+- **Emergency Panic Wipe (`Ctrl+Shift+X` / `Cmd+Shift+X`)**: Instantly purges all volatile cryptographic keys from `chrome.storage.session`, closes active manager views, and resets memory state.
+
+### 2. ⚡ Serverless P2P Air-Gapped Hand-Off & QR
+- **Zero-Server Workspace Transfer**: Hand off encrypted workspaces between machines or to mobile devices without database or intermediary cloud relays.
+- **RFC 3986 §3.5 Air-Gap**: Payloads are Gzip-compressed, encrypted with an ephemeral 256-bit AES-GCM key, and embedded strictly into the URL hash fragment (`#share=v1.<iv>.<key>.<ciphertext>`). Fragment identifiers are never transmitted across HTTP requests to any server.
+- **Embedded Vector QR**: Generates clean, zero-dependency SVG QR codes for immediate mobile camera scanning.
+
+### 3. 🛡️ Forensic Freeze-Frame (Hardware-Signed `.vaultproof`)
+- **Audit State Manifests**: Captures a snapshot of research tabs during smart contract audits or incident responses.
+- **Canonical SHA-256 Digest**: Serializes state trees using RFC 8785 deterministic alphabetical key sorting.
+- **Cryptographic Non-Repudiation**: The state digest is signed by the auditor's hardware passkey (FIDO2 ECDSA P-256) or ephemeral ECDSA keypair, outputting verifiable `.vaultproof` bundles.
+- **Drag-and-Drop Verifier**: The live web portal provides an instant verification dropzone validating hash integrity and digital signatures.
+
+### 4. 🎨 Chromium Tab Group Persona Swapper
+- **Native Group Preservation**: Captures and persists Chromium colored tab groups (title, color, collapsed state).
+- **Persona Reconstitution**: Upon restoration, native `chrome.tabGroups` APIs reconstruct the exact visual tab groups, allowing seamless switching between isolated research personas.
+
+---
+
 ## ⚡ Quick Start (Install in 30 Seconds)
 
 VaultTab runs natively on all modern Chromium browsers (**Google Chrome**, **Brave**, **Microsoft Edge**, **Arc**, **Opera**) as an unpacked Manifest V3 extension.
@@ -75,9 +99,11 @@ git clone https://github.com/Saman-ghorayshi/vault-tab.git
 | **Key Derivation** | **PBKDF2 (600,000 rounds)** | None | None | PBKDF2 / Argon2id |
 | **Hardware Passkeys (FIDO2)** | **Native WebAuthn (TouchID/YubiKey)** | Unsupported | Unsupported | Supported |
 | **Ephemeral RAM Isolation** | **`chrome.storage.session` (Zero Disk)** | Plaintext Disk | Plaintext Disk | RAM Process Cache |
+| **Air-Gapped P2P Transfer** | **E2EE URL Hash + SVG QR** | Plaintext Export | Plaintext Export | Cloud Sync Only |
+| **Forensic Audit Proofs** | **`.vaultproof` (ECDSA P-256)** | Unsupported | Unsupported | Unsupported |
 | **Local Vector Semantic Search** | **In-Browser Word2Vec (Quantized)** | Substring Only | Substring Only | Keyword Only |
 | **Telemetry & Trackers** | **0% (100% Offline by Default)** | Analytics Trackers | Analytics Trackers | Crash Telemetry |
-| **Automated Unit Testing** | **38 Passing Tests (Node 20/22/24)** | Closed Source | Closed Source | Open Source Suite |
+| **Automated Unit Testing** | **46 Passing Tests (Node 20/22/24)** | Closed Source | Closed Source | Open Source Suite |
 
 ---
 
@@ -118,6 +144,7 @@ graph TD
 ### Global Browser Shortcuts (Works on Any Webpage)
 - <kbd>Ctrl+Shift+S</kbd> (<kbd>Cmd+Shift+S</kbd> on macOS) — Instantly encrypts and vaults the active tab.
 - <kbd>Alt+Shift+S</kbd> — Instantly encrypts and vaults all tabs in the active window.
+- <kbd>Ctrl+Shift+X</kbd> (<kbd>Cmd+Shift+X</kbd> on macOS) — **Emergency Panic Wipe**: Immediately purges active encryption keys and locks vault.
 
 ### Manager Page Navigation
 - <kbd>J</kbd> / <kbd>K</kbd> — Vim-style down/up navigation across tab groups.
@@ -151,20 +178,25 @@ VaultTab can sync encrypted backups to your private Google Drive app-data folder
 
 ## 🧪 Automated Test Suite
 
-VaultTab maintains a comprehensive unit test suite covering cryptanalysis, vector arithmetic, and hardware parsing:
+VaultTab maintains an automated test suite with **46 test cases** passing across Node 20.x, 22.x, and 24.x:
 
 ```bash
-# Run all 38 automated test cases
 npm test
 ```
 
 ```
-✔ crypto.js: PBKDF2 600,000 key derivation & AES-256-GCM round-trip (11 tests)
-✔ webauthn.js: COSE CBOR decoding, UP/UV flag parsing & ECDSA assertion (4 tests)
-✔ embedder.js: Skip-gram negative sampling, vocab indexing & cosine similarity (12 tests)
-✔ phase5: Int8 quantization precision bounds & vector clustering (11 tests)
+✔ BURNER: TTL Expiration and Panic Purge Logic (2 tests)
+✔ CRYPTO: PBKDF2 600,000 key derivation & AES-256-GCM round-trip (5 tests)
+✔ DEADLOCK & CONCURRENCY: Mutex lease expiration & tab crash resilience (2 tests)
+✔ EDGE CASES: Search AST, ReDoS guards & query sanitizer (4 tests)
+✔ AI EMBEDDER: Web Worker training, quantization & cosine ranking (1 test)
+✔ FREEZE-FRAME: Canonical RFC 8785 JSON, SHA-256 state tree & ECDSA P-256 verification (5 tests)
+✔ P2P SHARE: Base64URL, Gzip stream compression, AES-GCM URL hash & vector QR (7 tests)
+✔ SECURITY AUDIT: URL scheme injection (20+ vectors), username prototype pollution & WebAuthn flag tampering (4 tests)
+✔ TAB GROUPS: Color validation, native group serialization & persona reconstruction (4 tests)
+✔ WEBAUTHN: ASN.1 DER to IEEE P1363 raw signature conversions (2 tests)
 
-Total: 38 passing (0 failures, 100% green CI)
+Total: 46 passing (0 failures, 100% green CI)
 ```
 
 ---
