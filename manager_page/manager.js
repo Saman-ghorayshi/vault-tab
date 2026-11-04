@@ -15,6 +15,7 @@ import { is_restorable_url, get_url_status } from '../common/urls.js';
 import { LocalTabEmbedder, calculate_cosine_similarity, kmeans_cluster } from '../common/embedder.js';
 import { sync_to_drive, download_from_drive } from '../common/sync.js';
 import { create_p2p_share_link } from '../common/p2p_share.js';
+import { create_audit_manifest, sign_audit_manifest_ecdsa, sign_audit_manifest_webauthn } from '../common/freeze_frame.js';
 
 const VERIFIER_STRING = 'aegis-verification-string';
 
@@ -2348,6 +2349,7 @@ function create_group_element(group_id, group_data, group_index = 0, envelope = 
     '<button class="restore-private-button private-restore-button">Incognito</button>' + // Clearer intent
     '<button class="export-urls-button secondary-button">Export URLs</button>' +
     '<button class="share-p2p-button secondary-button" title="Air-gapped serverless E2EE share & QR code">⚡ Share P2P</button>' +
+    '<button class="audit-proof-button secondary-button" title="Export hardware-signed forensic audit proof (.vaultproof)">🛡️ Audit Proof</button>' +
     '<button class="delete-button">Delete Group</button>'; // Clearer intent
 
   header.appendChild(title_el);
@@ -2609,6 +2611,63 @@ function create_group_element(group_id, group_data, group_index = 0, envelope = 
       } finally {
         share_btn.disabled = false;
         share_btn.textContent = '⚡ Share P2P';
+      }
+    });
+  }
+
+  
+  const audit_btn = group_element.querySelector('.audit-proof-button');
+  if (audit_btn) {
+    audit_btn.addEventListener('click', async () => {
+      audit_btn.disabled = true;
+      audit_btn.textContent = 'Signing...';
+      try {
+        const manifest = create_audit_manifest(group_data, active_username || 'anonymous');
+        const user = await get_user_by_username(active_username);
+        let proofBundle;
+
+        if (user && user.passkey_credential_id && user.passkey_public_key) {
+          try {
+            proofBundle = await sign_audit_manifest_webauthn(
+              manifest,
+              user.passkey_credential_id,
+              user.passkey_public_key
+            );
+          } catch (e) {
+            console.warn('Hardware passkey signing cancelled or unavailable, using ECDSA P-256:', e);
+            const keyPair = await crypto.subtle.generateKey(
+              { name: 'ECDSA', namedCurve: 'P-256' },
+              true,
+              ['sign', 'verify']
+            );
+            proofBundle = await sign_audit_manifest_ecdsa(manifest, keyPair);
+          }
+        } else {
+          const keyPair = await crypto.subtle.generateKey(
+            { name: 'ECDSA', namedCurve: 'P-256' },
+            true,
+            ['sign', 'verify']
+          );
+          proofBundle = await sign_audit_manifest_ecdsa(manifest, keyPair);
+        }
+
+        const proofJson = JSON.stringify(proofBundle, null, 2);
+        const blob = new Blob([proofJson], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const cleanName = (manifest.session_name || 'session').replace(/[^a-zA-Z0-9_\-]/g, '_');
+        a.href = url;
+        a.download = `${cleanName}-${Date.now()}.vaultproof`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        show_toast('🛡️ Signed forensic audit proof exported (.vaultproof)', 'success');
+      } catch (err) {
+        show_toast('Failed to export audit proof: ' + (err?.message || err), 'error');
+      } finally {
+        audit_btn.disabled = false;
+        audit_btn.textContent = '🛡️ Audit Proof';
       }
     });
   }

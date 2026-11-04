@@ -373,6 +373,30 @@
   </section>
 
   
+  
+  <!-- Section: Forensic Freeze-Frame Verifier Lab -->
+  <section id="audit-proof-lab" class="section-wrap">
+    <div class="section-head">
+      <span class="section-tag">Forensic Auditing</span>
+      <h2>Forensic Freeze-Frame &amp; Cryptographic Proofs</h2>
+      <p>Cryptographically freeze and sign research workspaces during security audits, smart contract reviews, or incident response. Every <code>.vaultproof</code> snapshot contains an RFC 8785 canonical SHA-256 state tree digest signed by hardware authenticators (FIDO2) or ECDSA P-256.</p>
+    </div>
+
+    <div class="card" style="max-width: 860px; margin: 0 auto;">
+      <div class="card-title">🛡️ Verify Audit Proof (.vaultproof)</div>
+      <p class="card-subtitle">Drop any <code>.vaultproof</code> file below to verify cryptographic non-repudiation, auditor identity, and tab integrity.</p>
+
+      <div id="proof-dropzone" style="border: 2px dashed var(--border); border-radius: 12px; padding: 2rem; text-align: center; cursor: pointer; transition: all .2s ease; background: rgba(255,255,255,0.01);">
+        <input type="file" id="proof-file-input" accept=".vaultproof,.json" style="display: none;" />
+        <div style="font-size: 2rem; margin-bottom: .5rem;">📑</div>
+        <strong style="color: #fff; font-size: 15px;">Click to select or drag &amp; drop a .vaultproof bundle</strong>
+        <p style="color: var(--text-dim); font-size: 12px; margin-top: 4px;">Supports WebAuthn FIDO2 and ECDSA P-256 signatures</p>
+      </div>
+
+      <div id="proof-verification-result" style="display:none; margin-top: 1.5rem; padding: 1.5rem; border-radius: 10px;"></div>
+    </div>
+  </section>
+
   <!-- Section: Air-Gapped P2P & QR Generator Lab -->
   <section id="p2p-lab" class="section-wrap">
     <div class="section-head">
@@ -917,6 +941,78 @@ document.getElementById('btn-test-open-p2p').addEventListener('click', () => {
   if (!latestShareUrl) return;
   window.location.hash = latestShareUrl.slice(latestShareUrl.indexOf('#'));
 });
+</script>
+
+
+<script type="module">
+import { verify_audit_proof } from './common/freeze_frame.js';
+
+const dropzone = document.getElementById('proof-dropzone');
+const fileInput = document.getElementById('proof-file-input');
+const resultBox = document.getElementById('proof-verification-result');
+
+if (dropzone && fileInput && resultBox) {
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.style.borderColor = '#10b981'; });
+  dropzone.addEventListener('dragleave', () => { dropzone.style.borderColor = 'var(--border)'; });
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.style.borderColor = 'var(--border)';
+    if (e.dataTransfer.files.length) handleProofFile(e.dataTransfer.files[0]);
+  });
+
+  fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length) handleProofFile(e.target.files[0]);
+  });
+
+  async function handleProofFile(file) {
+    try {
+      const text = await file.text();
+      const bundle = JSON.parse(text);
+      const res = await verify_audit_proof(bundle);
+
+      resultBox.style.display = 'block';
+      resultBox.style.background = 'rgba(16, 185, 129, 0.08)';
+      resultBox.style.border = '1px solid #10b981';
+
+      resultBox.innerHTML = `
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+          <span style="font-size:1.5rem; color:#10b981;">✔</span>
+          <h3 style="margin:0; color:#10b981; font-size:16px;">Cryptographic Proof Verified &amp; Authentic</h3>
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; font-size:13px; margin-bottom:14px;">
+          <div><strong style="color:var(--text-dim)">Auditor:</strong> <span style="color:#fff">${escapeHtml(res.auditor)}</span></div>
+          <div><strong style="color:var(--text-dim)">Session:</strong> <span style="color:#fff">${escapeHtml(res.sessionName)}</span></div>
+          <div><strong style="color:var(--text-dim)">Timestamp:</strong> <span style="color:#fff">${new Date(res.timestamp).toLocaleString()}</span></div>
+          <div><strong style="color:var(--text-dim)">Signer:</strong> <span style="color:var(--cyan)">${escapeHtml(res.signerType)}</span></div>
+        </div>
+        <div style="font-family:monospace; font-size:11px; background:rgba(0,0,0,0.3); padding:8px 12px; border-radius:6px; word-break:break-all; color:var(--text-dim); margin-bottom:14px;">
+          <strong style="color:#10b981;">Canonical SHA-256 Digest:</strong> ${escapeHtml(bundle.manifest_hash)}
+        </div>
+        <strong style="color:#fff; font-size:13px;">Verified Forensic Tabs (${res.tabCount}):</strong>
+        <div style="margin-top:8px; display:flex; flex-direction:column; gap:6px;">
+          ${bundle.manifest.tabs.map(t => `
+            <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); padding:6px 10px; border-radius:6px; font-size:12px;">
+              <a href="${escapeHtml(t.url)}" target="_blank" rel="noopener noreferrer" style="color:var(--cyan); text-decoration:none; font-weight:600;">${escapeHtml(t.title)}</a>
+              <div style="color:var(--text-dim); font-size:11px;">${escapeHtml(t.url)}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    } catch (err) {
+      resultBox.style.display = 'block';
+      resultBox.style.background = 'rgba(239, 68, 68, 0.08)';
+      resultBox.style.border = '1px solid #ef4444';
+      resultBox.innerHTML = `
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:1.5rem; color:#ef4444;">✘</span>
+          <h3 style="margin:0; color:#ef4444; font-size:16px;">Proof Verification Failed</h3>
+        </div>
+        <p style="margin:8px 0 0; color:#fca5a5; font-size:13px;">${escapeHtml(err.message || 'Signature mismatch or corrupted file')}</p>
+      `;
+    }
+  }
+}
 </script>
 
 </body>
