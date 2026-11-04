@@ -324,3 +324,40 @@ async function migrate_old_global_model() {
   await chrome.storage.local.remove(STORAGE_KEYS.model).catch(() => {});
   await idb_delete_chunked('aegis_model').catch(() => {});
 }
+
+// purge groups that have expired (TTL) or all burner groups (during panic wipe)
+export async function purge_expired_or_burner_groups(username, purge_all_burners = false) {
+  const groups = await get_tab_groups(username);
+  if (!groups || groups.length === 0) return 0;
+
+  const now = Date.now();
+  const kept = [];
+  let purged_count = 0;
+
+  for (const group of groups) {
+    const is_expired = group.expires_at && now >= group.expires_at;
+    const should_purge = (purge_all_burners && group.is_burner) || is_expired;
+
+    if (should_purge) {
+      purged_count++;
+    } else {
+      kept.push(group);
+    }
+  }
+
+  if (purged_count > 0) {
+    await save_tab_groups(username, kept);
+  }
+  return purged_count;
+}
+
+// delete a single group by ID (e.g. burn-on-restore)
+export async function delete_tab_group_by_id(username, group_id) {
+  const groups = await get_tab_groups(username);
+  const updated = groups.filter(g => g.id !== group_id);
+  if (updated.length !== groups.length) {
+    await save_tab_groups(username, updated);
+    return true;
+  }
+  return false;
+}

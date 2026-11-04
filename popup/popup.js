@@ -414,10 +414,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (suggested_name) tab_data.name = suggested_name;
 
       const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
+      const is_burner = document.getElementById('popup-burner-toggle')?.checked || false;
       const new_group = {
         id: crypto.randomUUID(),
         iv: encrypted.iv,
-        ciphertext: encrypted.ciphertext
+        ciphertext: encrypted.ciphertext,
+        is_burner: is_burner,
+        burn_on_restore: is_burner,
+        expires_at: is_burner ? (Date.now() + 24 * 3600 * 1000) : null
       };
       
       const response = await chrome.runtime.sendMessage({
@@ -495,10 +499,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (suggested_name) tab_data.name = suggested_name;
 
       const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
+      const is_burner = document.getElementById('popup-burner-toggle')?.checked || false;
       const new_group = {
         id: crypto.randomUUID(),
         iv: encrypted.iv,
-        ciphertext: encrypted.ciphertext
+        ciphertext: encrypted.ciphertext,
+        is_burner: is_burner,
+        burn_on_restore: is_burner,
+        expires_at: is_burner ? (Date.now() + 24 * 3600 * 1000) : null
       };
       
       const response = await chrome.runtime.sendMessage({

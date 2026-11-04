@@ -52,6 +52,13 @@
         "mac": "Alt+Shift+S"
       },
       "description": "Save all tabs in window to VaultTab"
+    },
+    "panic_wipe": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+X",
+        "mac": "Command+Shift+X"
+      },
+      "description": "Emergency Panic: Lock vault and wipe ephemeral burner sessions"
     }
   }
 }

@@ -62,6 +62,10 @@
       <h1>VaultTab</h1>
       <p>Signed in as <span id="current-user-label" class="user-label"></span></p>
       <div class="button-group">
+        <label class="burner-toggle-label" style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);cursor:pointer;margin-bottom:6px;">
+          <input type="checkbox" id="popup-burner-toggle" />
+          <span>🔥 Burner (Self-Destruct on Restore)</span>
+        </label>
         <button id="save-tabs-button" class="primary-button">Save All Tabs</button>
         <button id="save-current-tab-button" class="secondary-button">Save This Tab</button>
         <button id="view-tabs-button" class="secondary-button">View Saved Tabs</button>

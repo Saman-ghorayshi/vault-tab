@@ -1492,6 +1492,7 @@ async function render_page(key) {
       decrypt(group, key).then(plaintext => ({
         id: group.id,
         data: JSON.parse(plaintext),
+        envelope: group,
         error: null
       })).catch((err) => {
         console.error(`[Aegis Diagnostic] Group ID ${group.id} could not be decrypted (${err?.name || 'Error'}: ${err?.message || 'AES-GCM tag mismatch'}).`);
@@ -1546,7 +1547,7 @@ async function render_page(key) {
         continue;
       }
       groups_container.appendChild(
-        create_group_element(result.id, result.data, group_index)
+        create_group_element(result.id, result.data, group_index, result.envelope)
       );
       group_index++;
     }
@@ -2255,7 +2256,7 @@ async function persist_ai_summary(group_id, summary, group_data) {
   await save_tab_groups(active_username, groups);
 }
 
-function create_group_element(group_id, group_data, group_index = 0) {
+function create_group_element(group_id, group_data, group_index = 0, envelope = null) {
   const group_element = document.createElement('div');
   group_element.className = 'group-card';
   group_element.dataset.groupId = group_id;
@@ -2272,6 +2273,13 @@ function create_group_element(group_id, group_data, group_index = 0) {
   title_el.className = 'group-title';
   title_el.title = 'Double-click to rename';
   title_el.textContent = `${display_name} (${group_data.tabs.length} tabs)`;
+  if (envelope && (envelope.is_burner || envelope.burn_on_restore)) {
+    const burner_badge = document.createElement('span');
+    burner_badge.className = 'tab-status-badge';
+    burner_badge.style.cssText = 'background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);margin-left:8px;font-size:10px;padding:2px 6px;border-radius:4px;vertical-align:middle;';
+    burner_badge.textContent = '🔥 Burn on Restore';
+    title_el.appendChild(burner_badge);
+  }
 
   const actions_div = document.createElement('div');
   actions_div.className = 'group-actions';
@@ -2478,14 +2486,28 @@ function create_group_element(group_id, group_data, group_index = 0) {
     });
   }
 
-  group_element.querySelector('.restore-button').addEventListener('click', async () => {
+  const execute_group_restore = async (is_private) => {
     const urls = group_data.tabs.map(tab => tab.url);
-    await restore_tabs_batched(urls, settings.always_private);
+    await restore_tabs_batched(urls, is_private);
+    if (envelope && (envelope.is_burner || envelope.burn_on_restore)) {
+      try {
+        await chrome.runtime.sendMessage({
+          type: 'vaulttab:burn-group',
+          group_id: group_id
+        });
+        group_element.classList.add('fade-out');
+        setTimeout(() => group_element.remove(), 400);
+        show_toast('🔥 Burner session restored & cryptographically purged from disk.', 'info');
+      } catch (_) {}
+    }
+  };
+
+  group_element.querySelector('.restore-button').addEventListener('click', () => {
+    execute_group_restore(settings.always_private);
   });
 
-  group_element.querySelector('.restore-private-button').addEventListener('click', async () => {
-    const urls = group_data.tabs.map(tab => tab.url);
-    await restore_tabs_batched(urls, true);
+  group_element.querySelector('.restore-private-button').addEventListener('click', () => {
+    execute_group_restore(true);
   });
 
   group_element.querySelector('.export-urls-button').addEventListener('click', () => {

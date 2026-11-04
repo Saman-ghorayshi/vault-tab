@@ -8,7 +8,9 @@ import {
   get_tab_groups, save_tab_groups,
   get_session_key, store_session_key, clear_session_key,
   get_session_user, set_session_user,
-  get_settings
+  get_settings,
+  purge_expired_or_burner_groups,
+  delete_tab_group_by_id
 } from './common/storage.js';
 import {
   derive_key_from_password, decrypt, encrypt, base64_to_array_buffer,
@@ -94,8 +96,23 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   } else if (alarm.name === 'aegis_reg_challenge_expiry') {
     // webauthn registration challenge expired — same cleanup.
     pending_unlock_credential = null;
+  } else if (alarm.name === 'vaulttab_ttl_sweep') {
+    // periodic cleanup of expired burner sessions
+    (async () => {
+      try {
+        const users = await get_all_users();
+        for (const u of users) {
+          await purge_expired_or_burner_groups(u.username, false);
+        }
+      } catch (_) {}
+    })();
   }
 });
+
+// Setup 5-minute background sweep for expired burner sessions
+try {
+  chrome.alarms.create('vaulttab_ttl_sweep', { periodInMinutes: 5 });
+} catch (_) {}
 
 // --- message-based session lifecycle ---
 // popup and manager pages send these messages instead of writing the
@@ -108,6 +125,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   (async () => {
     switch (message.type) {
+      case 'vaulttab:burn-group': {
+        try {
+          const s_user = await get_session_user();
+          if (!s_user || !message.group_id) {
+            sendResponse({ ok: false, error: 'Unauthorized or missing group_id' });
+            return;
+          }
+          const deleted = await delete_tab_group_by_id(s_user, message.group_id);
+          sendResponse({ ok: deleted });
+        } catch (e) {
+          sendResponse({ ok: false, error: e.message });
+        }
+        break;
+      }
       case 'aegis:unlock': {
         // { type: 'aegis:unlock', username, password }
         // phase 1: password verification. webauthn second-factor
