@@ -360,6 +360,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       const all_tabs = await chrome.tabs.query({ currentWindow: true }) || [];
       const manager_url = chrome.runtime.getURL('manager_page/manager.html');
 
+      let native_groups = {};
+      let serialized_meta = { tabs: [], native_groups: {} };
+      if (chrome.tabGroups && chrome.tabGroups.query) {
+        try {
+          const rawGroups = await chrome.tabGroups.query({ windowId: chrome.windows.WINDOW_ID_CURRENT }) || [];
+          serialized_meta = serialize_tabs_with_groups(all_tabs, rawGroups);
+          native_groups = serialized_meta.native_groups;
+        } catch (_) {}
+      }
+
       const tabs_to_save = [];
       const tab_ids_to_remove = [];
 
@@ -379,12 +389,14 @@ document.addEventListener('DOMContentLoaded', async () => {
           // use title from tab, or derive from url, or fallback placeholder
           const title = derive_title_from_url(target_url, tab.title);
 
+          const matchedGroup = serialized_meta.tabs[i];
           tabs_to_save.push({
             id: crypto.randomUUID(),
             title: title,
             url: target_url,
             fav_icon_url: tab.favIconUrl || null,
-            status: status
+            status: status,
+            group_key: matchedGroup?.group_key || undefined
           });
           // only close tabs that are actually restorable
           if (status === 'ok') {

@@ -7,6 +7,7 @@
     "storage",
     "unlimitedStorage",
     "tabs",
+    "tabGroups",
     "contextMenus",
     "alarms",
     "scripting",

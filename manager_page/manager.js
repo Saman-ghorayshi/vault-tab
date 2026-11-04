@@ -16,6 +16,7 @@ import { LocalTabEmbedder, calculate_cosine_similarity, kmeans_cluster } from '.
 import { sync_to_drive, download_from_drive } from '../common/sync.js';
 import { create_p2p_share_link } from '../common/p2p_share.js';
 import { create_audit_manifest, sign_audit_manifest_ecdsa, sign_audit_manifest_webauthn } from '../common/freeze_frame.js';
+import { plan_group_reconstruction, apply_group_reconstruction } from '../common/tab_groups.js';
 
 const VERIFIER_STRING = 'aegis-verification-string';
 
@@ -1413,11 +1414,11 @@ function hide_undo_toast() {
   if (delete_state.timer_interval) clearInterval(delete_state.timer_interval);
 }
 
-// restore tabs in batches to avoid overwhelming the browser
-async function restore_tabs_batched(urls, incognito = false) {
-  // filter out URLs that Chrome will reject
-  const safe_urls = urls.filter(is_restorable_url);
-  if (safe_urls.length === 0) {
+// restore tabs in batches to avoid overwhelming the browser, preserving native Chromium tab groups
+async function restore_tabs_batched(tabs_or_urls, incognito = false, native_groups = null) {
+  const tabs = tabs_or_urls.map(t => (typeof t === 'string' ? { url: t } : t));
+  const safe_tabs = tabs.filter(t => is_restorable_url(t.url));
+  if (safe_tabs.length === 0) {
     show_toast('No restorable URLs in this group (all are system or internal pages).', 'info');
     return;
   }
@@ -1431,29 +1432,52 @@ async function restore_tabs_batched(urls, incognito = false) {
       }
     }
 
-    // create window with the first url
     const new_window = await chrome.windows.create({
-      url: safe_urls[0],
+      url: safe_tabs[0].url,
       incognito: incognito
     });
 
-    // batch the remaining urls
-    const remaining_urls = safe_urls.slice(1);
+    const created_tab_records = [];
+    if (new_window.tabs && new_window.tabs.length > 0) {
+      created_tab_records.push({
+        id: new_window.tabs[0].id,
+        group_key: safe_tabs[0].group_key
+      });
+    }
+
+    const remaining_tabs = safe_tabs.slice(1);
     const batch_size = 10;
 
-    for (let i = 0; i < remaining_urls.length; i += batch_size) {
-      const batch = remaining_urls.slice(i, i + batch_size);
-      const create_promises = batch.map(url =>
+    for (let i = 0; i < remaining_tabs.length; i += batch_size) {
+      const batch = remaining_tabs.slice(i, i + batch_size);
+      const create_promises = batch.map(t =>
         chrome.tabs.create({
           windowId: new_window.id,
-          url: url,
+          url: t.url,
           active: false
+        }).then(created => {
+          if (created && created.id) {
+            created_tab_records.push({
+              id: created.id,
+              group_key: t.group_key
+            });
+          }
         }).catch(err => {
-          console.warn(`Failed to restore tab: ${url}`, err);
+          console.warn(`Failed to restore tab: ${t.url}`, err);
           return null;
         })
       );
       await Promise.all(create_promises);
+    }
+
+    // Persona Swapping: Reconstruct native Chromium Tab Groups
+    if (native_groups && Object.keys(native_groups).length > 0 && chrome.tabGroups) {
+      try {
+        const plan = plan_group_reconstruction(created_tab_records, native_groups);
+        await apply_group_reconstruction(chrome, plan);
+      } catch (group_err) {
+        console.warn('Native tab grouping reconstruction skipped:', group_err);
+      }
     }
   } catch (error) {
     console.error('Error in batched restore:', error);
@@ -2550,8 +2574,7 @@ function create_group_element(group_id, group_data, group_index = 0, envelope = 
   }
 
   const execute_group_restore = async (is_private) => {
-    const urls = group_data.tabs.map(tab => tab.url);
-    await restore_tabs_batched(urls, is_private);
+    await restore_tabs_batched(group_data.tabs, is_private, group_data.native_groups);
     if (envelope && (envelope.is_burner || envelope.burn_on_restore)) {
       try {
         await chrome.runtime.sendMessage({
