@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/Saman-ghorayshi/vault-tab/actions/workflows/test.yml"><img src="https://github.com/Saman-ghorayshi/vault-tab/actions/workflows/test.yml/badge.svg" alt="CI Build Status"></a>
-  <img src="https://img.shields.io/badge/tests-38%20passing-success?style=flat-square" alt="38 Automated Tests">
+  <img src="https://img.shields.io/badge/tests-27%20passing-success?style=flat-square" alt="27 Automated Tests">
   <img src="https://img.shields.io/badge/node-20%20%7C%2022%20%7C%2024-blue?style=flat-square" alt="Node Supported Matrix">
   <img src="https://img.shields.io/badge/security-AES--256--GCM-10b981?style=flat-square" alt="AES-256-GCM">
   <img src="https://img.shields.io/badge/auth-WebAuthn%20Passkeys-38bdf8?style=flat-square" alt="WebAuthn Passkeys">

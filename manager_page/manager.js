@@ -1,4 +1,5 @@
 import {
+  is_valid_username,
   get_all_users, get_user_by_username, save_user, delete_user,
   get_tab_groups, save_tab_groups,
   get_session_key, store_session_key, clear_session_key,
@@ -293,6 +294,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // determine which user the backup belongs to
     const backup_username = backup_data.exported_by || active_username;
+    if (!is_valid_username(backup_username)) {
+      throw new Error('Backup contains invalid or unsafe username identifier.');
+    }
     let import_target = backup_username;
 
     // if the backup user doesn't exist locally, create them from the
@@ -2300,7 +2304,12 @@ function create_group_element(group_id, group_data, group_index = 0) {
     tab_element.dataset.url = tab.url || '';
     tab_element.draggable = true;
 
-    if (tab.fav_icon_url) {
+    const is_safe_fav = tab.fav_icon_url && (
+      tab.fav_icon_url.startsWith('https://') ||
+      tab.fav_icon_url.startsWith('data:image/') ||
+      tab.fav_icon_url.startsWith('chrome://favicon/')
+    );
+    if (is_safe_fav) {
       const fav_img = document.createElement('img');
       fav_img.src = tab.fav_icon_url;
       fav_img.alt = 'favicon';

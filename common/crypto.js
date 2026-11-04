@@ -80,10 +80,13 @@ export async function derive_key_from_password(password, salt, iterations) {
 
 // encrypt plaintext string with AES-GCM, returns { iv, ciphertext } as base64
 export async function encrypt(plaintext, key) {
+  if (typeof plaintext !== 'string') {
+    throw new Error('Invalid plaintext: string expected');
+  }
   const encoder = new TextEncoder();
   const iv = generate_iv();
   const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: iv },
+    { name: 'AES-GCM', iv: iv, tagLength: 128 },
     key,
     encoder.encode(plaintext)
   );
@@ -96,20 +99,35 @@ export async function encrypt(plaintext, key) {
 
 // decrypt a package with AES-GCM, returns plaintext string
 export async function decrypt(encrypted_package, key) {
-  const decoder = new TextDecoder();
-  const iv = base64_to_array_buffer(encrypted_package.iv);
-  const ciphertext = base64_to_array_buffer(encrypted_package.ciphertext);
-
-  try {
-    const decrypted = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: iv },
-      key,
-      ciphertext
-    );
-    return decoder.decode(decrypted);
-  } catch (err) {
-    throw err;
+  if (!encrypted_package || typeof encrypted_package !== 'object') {
+    throw new Error('Invalid encrypted package: object expected');
   }
+  if (!encrypted_package.iv || typeof encrypted_package.iv !== 'string') {
+    throw new Error('Invalid encrypted package: missing or invalid IV');
+  }
+  if (!encrypted_package.ciphertext || typeof encrypted_package.ciphertext !== 'string') {
+    throw new Error('Invalid encrypted package: missing or invalid ciphertext');
+  }
+
+  const decoder = new TextDecoder();
+  let iv, ciphertext;
+  try {
+    iv = base64_to_array_buffer(encrypted_package.iv);
+    ciphertext = base64_to_array_buffer(encrypted_package.ciphertext);
+  } catch (e) {
+    throw new Error('Failed to decode base64 ciphertext or IV: ' + e.message);
+  }
+
+  if (iv.byteLength !== 12) {
+    throw new Error(`Invalid IV length: expected 12 bytes for AES-GCM, got ${iv.byteLength}`);
+  }
+
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: iv, tagLength: 128 },
+    key,
+    ciphertext
+  );
+  return decoder.decode(decrypted);
 }
 
 // export a CryptoKey to raw ArrayBuffer for storage

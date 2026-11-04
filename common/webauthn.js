@@ -431,7 +431,8 @@ export async function verify_assertion(
   credential_public_key_cbor,
   challenge_b64,
   assertion,
-  origin
+  origin,
+  expected_rp_id = null
 ) {
   try {
     // 0. decode the COSE key from base64url to a Uint8Array — the parser
@@ -461,9 +462,35 @@ export async function verify_assertion(
     // 2. build the signature payload:
     //    authenticatorData + SHA256(clientDataJSON)
     const auth_data = base64url_to_array_buffer(assertion.authenticator_data);
+    const auth_bytes = new Uint8Array(auth_data);
+
+    // WebAuthn Level 3: authenticatorData must have at least 37 bytes
+    // (32-byte rpIdHash + 1-byte flags + 4-byte signCount)
+    if (auth_bytes.length < 37) {
+      return false;
+    }
+
+    // verify User Present (UP) flag: Bit 0 of the flags byte (offset 32)
+    const flags = auth_bytes[32];
+    if ((flags & 0x01) === 0) {
+      return false;
+    }
+
+    // verify RP ID hash if expected_rp_id is provided
+    if (expected_rp_id) {
+      const encoder = new TextEncoder();
+      const expected_hash_ab = await crypto.subtle.digest('SHA-256', encoder.encode(expected_rp_id));
+      const expected_hash = new Uint8Array(expected_hash_ab);
+      for (let i = 0; i < 32; i++) {
+        if (auth_bytes[i] !== expected_hash[i]) {
+          return false;
+        }
+      }
+    }
+
     const client_data_hash = await crypto.subtle.digest('SHA-256', client_data_raw);
     const signed_data = new Uint8Array(auth_data.byteLength + client_data_hash.byteLength);
-    signed_data.set(new Uint8Array(auth_data), 0);
+    signed_data.set(auth_bytes, 0);
     signed_data.set(new Uint8Array(client_data_hash), auth_data.byteLength);
 
     // 3. parse the COSE public key and verify

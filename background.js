@@ -101,6 +101,11 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 // popup and manager pages send these messages instead of writing the
 // session directly. the service worker is the sole session writer.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Reject messages from unauthorized origins or external contexts
+  if (sender && sender.id && sender.id !== chrome.runtime.id) {
+    sendResponse({ ok: false, error: 'Unauthorized sender context' });
+    return;
+  }
   (async () => {
     switch (message.type) {
       case 'aegis:unlock': {
@@ -226,7 +231,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             user.webauthn.public_key_cbor,
             pending_unlock.challenge,
             message.assertion,
-            origin
+            origin,
+            chrome.runtime.id
           );
 
           if (!valid) {

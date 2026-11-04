@@ -78,16 +78,28 @@ export async function get_all_users() {
   return deduplicated;
 }
 
+export function is_valid_username(username) {
+  if (!username || typeof username !== 'string') return false;
+  const trimmed = username.trim();
+  if (trimmed.length < 2 || trimmed.length > 32) return false;
+  if (trimmed === '__proto__' || trimmed === 'prototype' || trimmed === 'constructor') return false;
+  return /^[a-zA-Z0-9_\-\.]+$/.test(trimmed);
+}
+
 export async function save_all_users(users_array) {
   return chrome.storage.local.set({ [STORAGE_KEYS.users]: users_array });
 }
 
 export async function get_user_by_username(username) {
+  if (!is_valid_username(username)) return null;
   const users = await get_all_users();
   return users.find(u => u.username === username) || null;
 }
 
 export async function save_user(user_object) {
+  if (!user_object || !is_valid_username(user_object.username)) {
+    throw new Error('Invalid user object: username must be alphanumeric (2-32 chars)');
+  }
   const users = await get_all_users();
   const index = users.findIndex(u => u.username === user_object.username);
   if (index >= 0) {

@@ -542,6 +542,11 @@
 </footer>
 
 <script>
+function escapeHtml(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
 // Tab Navigation
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -712,8 +717,8 @@ function renderNeuralResults() {
   container.innerHTML = scored.map(t => `
     <div class="search-result-item">
       <div>
-        <div class="title">${t.title}</div>
-        <div class="domain">${t.domain}</div>
+        <div class="title">${escapeHtml(t.title)}</div>
+        <div class="domain">${escapeHtml(t.domain)}</div>
       </div>
       <div class="score-pill">Cosine Sim: ${(t.score).toFixed(2)}</div>
     </div>

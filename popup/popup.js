@@ -1,4 +1,5 @@
 import {
+  is_valid_username,
   get_all_users, save_user, get_user_by_username,
   get_session_key, store_session_key, set_session_user, get_session_user,
   load_model
@@ -81,6 +82,11 @@ async function handle_setup_submit(u_el, p_el, pc_el, btn_el, err_el, auto_login
   err_el.classList.add('hidden');
   if (!username) {
     err_el.textContent = 'Please enter a username';
+    err_el.classList.remove('hidden');
+    return;
+  }
+  if (!is_valid_username(username)) {
+    err_el.textContent = 'Username must be alphanumeric (2-32 chars, -, _, .)';
     err_el.classList.remove('hidden');
     return;
   }
