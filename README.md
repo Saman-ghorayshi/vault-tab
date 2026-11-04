@@ -26,6 +26,10 @@
 
 **VaultTab** is a zero-knowledge cryptographic session and tab manager built for security researchers, Web3 developers, and privacy-conscious engineers. It safeguards sensitive tabs, active workspaces, and confidential research against physical memory dumps, shoulder-surfing, and local disk forensics.
 
+<p align="center">
+  <img src="assets/vaulttab-demo.gif" alt="VaultTab Walkthrough &amp; UI Preview" width="100%">
+</p>
+
 Unlike traditional tab managers that store raw URLs and unencrypted titles in plaintext LevelDB/SQLite files, VaultTab protects every record with **hardware-bound WebAuthn Passkeys (TouchID / Windows Hello / YubiKey)**, **600,000 PBKDF2-HMAC-SHA256 iterations**, and **AES-256-GCM authenticated encryption**.
 
 ---
