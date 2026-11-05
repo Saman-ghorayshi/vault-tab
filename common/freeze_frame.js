@@ -162,6 +162,10 @@ export async function verify_audit_proof(proofBundle, expectedOrigin = null) {
         throw new Error(`Unsupported proof bundle format: ${proofBundle.format}`);
     }
 
+    if (!proofBundle.manifest || typeof proofBundle.manifest !== 'object') {
+        throw new Error('Invalid proof bundle: missing or invalid manifest object.');
+    }
+
     // 1. Recompute canonical digest
     const { hashHex, hashBuffer, hashBase64Url } = await compute_manifest_digest(proofBundle.manifest);
     if (hashHex !== proofBundle.manifest_hash) {
@@ -209,7 +213,12 @@ export async function verify_audit_proof(proofBundle, expectedOrigin = null) {
             throw new Error('Missing public_key_cbor or assertion in WebAuthn proof.');
         }
 
-        const origin = expectedOrigin || (typeof window !== 'undefined' ? window.location.origin : 'chrome-extension://' + chrome.runtime.id);
+        const origin = expectedOrigin ||
+            (typeof window !== 'undefined' && window.location?.origin
+                ? window.location.origin
+                : (typeof chrome !== 'undefined' && chrome.runtime?.id
+                    ? 'chrome-extension://' + chrome.runtime.id
+                    : 'https://saman-ghorayshi.github.io'));
         const isValid = await verify_assertion(
             proofBundle.public_key_cbor,
             hashBase64Url,

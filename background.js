@@ -139,6 +139,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         break;
       }
+      case 'vaulttab:panic-wipe': {
+        try {
+          const s_user = await get_session_user();
+          if (s_user) {
+            await purge_expired_or_burner_groups(s_user, true);
+          }
+          await clear_session_key();
+          try {
+            chrome.runtime.sendMessage({ type: 'aegis:locked' }).catch(() => {});
+          } catch (_) {}
+          sendResponse({ ok: true });
+        } catch (e) {
+          sendResponse({ ok: false, error: e.message });
+        }
+        break;
+      }
       case 'aegis:unlock': {
         // { type: 'aegis:unlock', username, password }
         // phase 1: password verification. webauthn second-factor
@@ -630,6 +646,22 @@ chrome.commands.onCommand.addListener(async (command) => {
       const final_ids = tab_ids_to_remove.filter(id => id !== manager_tab.id);
       if (final_ids.length > 0) {
         await chrome.tabs.remove(final_ids);
+      }
+    } else if (command === 'panic_wipe') {
+      try {
+        if (session_user) {
+          await purge_expired_or_burner_groups(session_user, true);
+        }
+        await clear_session_key();
+        try {
+          chrome.runtime.sendMessage({ type: 'aegis:locked' }).catch(() => {});
+        } catch (_) {}
+        const [active_tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (active_tab?.id) {
+          await show_in_page_toast(active_tab.id, '🚨 Emergency Panic Wipe: Vault Locked!');
+        }
+      } catch (err) {
+        console.error('Panic wipe shortcut failed:', err);
       }
     }
   } catch (err) {

@@ -31,7 +31,12 @@ export function base64url_to_buffer(str) {
     while (b64.length % 4 !== 0) {
         b64 += '=';
     }
-    const binary = atob(b64);
+    let binary;
+    try {
+        binary = atob(b64);
+    } catch (_) {
+        throw new Error('Failed to decode Base64URL string: malformed characters or padding.');
+    }
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) {
         bytes[i] = binary.charCodeAt(i);

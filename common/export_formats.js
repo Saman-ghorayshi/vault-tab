@@ -39,9 +39,11 @@ export function format_as_markdown(group) {
     }
 
     tabs.forEach((tab, idx) => {
-        const tabTitle = (tab.title || tab.url || 'Untitled').trim().replace(/\]/g, '\\]').replace(/\[/g, '\\[');
+        const rawTitle = (tab.title || tab.url || 'Untitled').replace(/[\r\n]+/g, ' ').trim();
+        const tabTitle = rawTitle.replace(/\]/g, '\\]').replace(/\[/g, '\\[');
         const url = (tab.url || '').trim();
-        md += `${idx + 1}. [${tabTitle}](${url})\n`;
+        const formattedUrl = /[ ()]/.test(url) ? `<${url}>` : url;
+        md += `${idx + 1}. [${tabTitle}](${formattedUrl})\n`;
     });
 
     md += `\n---\n*Exported securely via [VaultTab](https://saman-ghorayshi.github.io/vault-tab/)*\n`;
@@ -86,20 +88,32 @@ export function format_as_html_bookmarks(group) {
 }
 
 /**
+ * Sanitize cell values against formula injection (CWE-1236).
+ * Prepends a single quote if the string begins with =, +, -, @, tab, or carriage return.
+ */
+function sanitize_csv_cell(val) {
+    let str = (val === null || val === undefined ? '' : String(val)).replace(/"/g, '""');
+    if (/^[=+\-@\t\r]/.test(str)) {
+        str = "'" + str;
+    }
+    return str;
+}
+
+/**
  * Format session tabs into CSV format.
  *
  * @param {object} group
  * @returns {string} CSV text
  */
 export function format_as_csv(group) {
-    const groupName = (group.name || 'Session').replace(/"/g, '""');
+    const groupName = sanitize_csv_cell(group.name || 'Session');
     const tabs = Array.isArray(group.tabs) ? group.tabs : [];
 
     let csv = `"Index","Title","URL","SessionName","Date"\n`;
     tabs.forEach((tab, idx) => {
-        const title = (tab.title || '').replace(/"/g, '""');
-        const url = (tab.url || '').replace(/"/g, '""');
-        const date = group.date || '';
+        const title = sanitize_csv_cell(tab.title || '');
+        const url = sanitize_csv_cell(tab.url || '');
+        const date = sanitize_csv_cell(group.date || '');
         csv += `"${idx + 1}","${title}","${url}","${groupName}","${date}"\n`;
     });
 

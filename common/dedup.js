@@ -17,16 +17,23 @@ export function normalize_tab_url(url) {
     try {
         const parsed = new URL(url.trim());
         // Clean standard tracking params that differentiate identical pages
-        const trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'ref', 'fbclid', 'gclid'];
-        for (const p of trackingParams) {
-            parsed.searchParams.delete(p);
+        const knownTrackers = new Set(['ref', 'fbclid', 'gclid', 'twclid', 'igshid', 'mc_cid', 'mc_eid', 'msclkid', 'yclid']);
+        const keysToDelete = [];
+        for (const key of parsed.searchParams.keys()) {
+            const lowerKey = key.toLowerCase();
+            if (lowerKey.startsWith('utm_') || knownTrackers.has(lowerKey)) {
+                keysToDelete.push(key);
+            }
+        }
+        for (const k of keysToDelete) {
+            parsed.searchParams.delete(k);
         }
         let clean = parsed.toString();
-        // Normalize: remove trailing slashes
-        clean = clean.replace(/\/+$/, '');
+        // Normalize: remove trailing slashes and dangling query/hash markers
+        clean = clean.replace(/\/+$/, '').replace(/[?#]+$/, '');
         return clean;
     } catch (_) {
-        return url.trim().toLowerCase().replace(/\/+$/, '');
+        return url.trim().toLowerCase().replace(/\/+$/, '').replace(/[?#]+$/, '');
     }
 }
 

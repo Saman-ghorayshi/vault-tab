@@ -407,6 +407,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (lock_button) {
     lock_button.addEventListener('click', async () => {
       await chrome.runtime.sendMessage({ type: 'aegis:lock' }).catch(() => {});
+      activeKeyCache = null;
+      latestDecryptedResults = [];
+      const cmdPalette = document.getElementById('command-palette-modal');
+      if (cmdPalette) {
+        cmdPalette.classList.add('hidden');
+        cmdPalette.style.display = 'none';
+      }
+
       selection_state.selected_tabs.clear();
       selection_state.all_tab_elements = [];
 
@@ -439,6 +447,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // floating action panel buttons
   setup_action_panel();
+  setup_command_palette();
+
+  // Global dismiss listener for export dropdowns (prevents memory leak from per-card listeners)
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.export-dropdown-wrap')) {
+      document.querySelectorAll('.export-dropdown-menu.show').forEach(m => m.classList.remove('show'));
+    }
+  });
 
   // shortcuts guide modal: click outside or close button to dismiss
   const shortcuts_modal = document.getElementById('shortcuts-modal');
@@ -1541,28 +1557,31 @@ async function execute_deduplication() {
     return;
   }
 
+  await acquire_distributed_lock();
   try {
     const fresh_envelopes = await get_tab_groups(active_username);
-    const updated_envelopes = [];
+    const cleanedMap = new Map(cleanedGroups.map(c => [c.id, c]));
 
-    for (const cleaned of cleanedGroups) {
-      const re_enc = await encrypt(JSON.stringify(cleaned), activeKeyCache);
-      const existingEnv = fresh_envelopes.find(e => e.id === cleaned.id);
-      updated_envelopes.push({
-        id: cleaned.id,
-        iv: re_enc.iv,
-        ciphertext: re_enc.ciphertext,
-        is_burner: existingEnv?.is_burner,
-        burn_on_restore: existingEnv?.burn_on_restore,
-        expires_at: existingEnv?.expires_at
-      });
+    for (let i = 0; i < fresh_envelopes.length; i++) {
+      const env = fresh_envelopes[i];
+      if (cleanedMap.has(env.id)) {
+        const cleaned = cleanedMap.get(env.id);
+        const re_enc = await encrypt(JSON.stringify(cleaned), activeKeyCache);
+        fresh_envelopes[i] = {
+          ...env,
+          iv: re_enc.iv,
+          ciphertext: re_enc.ciphertext
+        };
+      }
     }
 
-    await save_tab_groups(active_username, updated_envelopes);
+    await save_tab_groups(active_username, fresh_envelopes);
     show_toast(`🧹 Cleaned ${removedCount} duplicate tab${removedCount > 1 ? 's' : ''} across workspaces.`, 'success');
     await render_page(activeKeyCache);
   } catch (err) {
     show_toast('Deduplication failed: ' + (err?.message || err), 'error');
+  } finally {
+    await release_distributed_lock();
   }
 }
 
@@ -1573,6 +1592,8 @@ function setup_command_palette() {
   const results = document.getElementById('cmd-palette-results');
   const triggerBtn = document.getElementById('cmd-k-trigger');
   if (!modal || !input || !results) return;
+  if (modal.dataset.initialized === 'true') return;
+  modal.dataset.initialized = 'true';
 
   let selectedIdx = 0;
   let currentItems = [];
@@ -1583,8 +1604,21 @@ function setup_command_palette() {
         const tabs = await chrome.tabs.query({ currentWindow: true });
         const valid = tabs.filter(t => is_restorable_url(t.url));
         if (valid.length) {
+          let native_groups = {};
+          if (chrome.tabGroups && chrome.tabGroups.query) {
+            try {
+              const rawGroups = await chrome.tabGroups.query({ windowId: chrome.windows.WINDOW_ID_CURRENT }) || [];
+              const serialized = serialize_tabs_with_groups(tabs, rawGroups);
+              native_groups = serialized.native_groups;
+            } catch (_) {}
+          }
           const fresh_groups = await get_tab_groups(active_username);
-          const new_data = { name: `Saved Window (${new Date().toLocaleTimeString()})`, date: new Date().toISOString(), tabs: valid.map(t => ({ id: crypto.randomUUID(), url: t.url, title: t.title })) };
+          const new_data = {
+            name: `Saved Window (${new Date().toLocaleTimeString()})`,
+            date: new Date().toISOString(),
+            tabs: valid.map(t => ({ id: crypto.randomUUID(), url: t.url, title: t.title })),
+            native_groups: (native_groups && Object.keys(native_groups).length > 0) ? native_groups : undefined
+          };
           const enc = await encrypt(JSON.stringify(new_data), activeKeyCache);
           fresh_groups.unshift({ id: crypto.randomUUID(), iv: enc.iv, ciphertext: enc.ciphertext });
           await save_tab_groups(active_username, fresh_groups);
@@ -1691,6 +1725,10 @@ function setup_command_palette() {
   }
 
   function open_palette() {
+    if (!activeKeyCache) {
+      show_toast('Unlock vault to access Command Palette', 'info');
+      return;
+    }
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
     input.value = '';
@@ -2609,6 +2647,48 @@ function show_p2p_share_modal(share_pkg) {
   if (done_btn) done_btn.onclick = close_modal;
 }
 
+// Atomically transfer a tab across workspaces under distributed mutex
+async function handle_cross_group_tab_move(source_group_id, target_group_id, dragged_tab_id) {
+  if (!source_group_id || !target_group_id || !dragged_tab_id || !activeKeyCache) return;
+  await acquire_distributed_lock();
+  try {
+    const fresh_groups = await get_tab_groups(active_username);
+    const srcIdx = fresh_groups.findIndex(g => g.id === source_group_id);
+    const dstIdx = fresh_groups.findIndex(g => g.id === target_group_id);
+
+    if (srcIdx === -1 || dstIdx === -1) {
+      show_toast('Cannot move tab: workspace not found.', 'error');
+      return;
+    }
+
+    const srcData = JSON.parse(await decrypt(fresh_groups[srcIdx], activeKeyCache));
+    const dstData = JSON.parse(await decrypt(fresh_groups[dstIdx], activeKeyCache));
+
+    const tabIdx = srcData.tabs.findIndex(t => t.id === dragged_tab_id);
+    if (tabIdx === -1) return;
+
+    const [movedTab] = srcData.tabs.splice(tabIdx, 1);
+    delete movedTab.group_key; // clear native group association to prevent phantom grouping
+    if (!Array.isArray(dstData.tabs)) dstData.tabs = [];
+    dstData.tabs.push(movedTab);
+
+    const srcEnc = await encrypt(JSON.stringify(srcData), activeKeyCache);
+    const dstEnc = await encrypt(JSON.stringify(dstData), activeKeyCache);
+
+    fresh_groups[srcIdx] = { ...fresh_groups[srcIdx], iv: srcEnc.iv, ciphertext: srcEnc.ciphertext };
+    fresh_groups[dstIdx] = { ...fresh_groups[dstIdx], iv: dstEnc.iv, ciphertext: dstEnc.ciphertext };
+
+    await save_tab_groups(active_username, fresh_groups);
+    show_toast(`Moved "${movedTab.title || 'Tab'}" to ${dstData.name || 'workspace'}.`, 'success');
+    await render_page(activeKeyCache);
+  } catch (err) {
+    console.error('Cross-group drag failed:', err);
+    show_toast('Failed to move tab across workspaces: ' + (err?.message || err), 'error');
+  } finally {
+    await release_distributed_lock();
+  }
+}
+
 function create_group_element(group_id, group_data, group_index = 0, envelope = null) {
   const group_element = document.createElement('div');
   group_element.className = 'group-card';
@@ -2764,7 +2844,7 @@ function create_group_element(group_id, group_data, group_index = 0, envelope = 
     tab_element.addEventListener('dragover', (e) => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      if (drag_state.dragged_element && drag_state.dragged_group_id === group_id) {
+      if (drag_state.dragged_element) {
         tab_element.classList.add('drag-over');
       }
     });
@@ -2773,7 +2853,7 @@ function create_group_element(group_id, group_data, group_index = 0, envelope = 
       tab_element.classList.remove('drag-over');
     });
 
-        tab_element.addEventListener('drop', async (e) => {
+    tab_element.addEventListener('drop', async (e) => {
       e.preventDefault();
       e.stopPropagation();
       tab_element.classList.remove('drag-over');
@@ -2798,42 +2878,54 @@ function create_group_element(group_id, group_data, group_index = 0, envelope = 
         persist_tab_reorder(group_id, tabs_list_el);
       } else {
         // Cross-Group Transfer: Move tab from source_group to target_group
-        try {
-          const dragged_tab_id = drag_state.dragged_element.dataset.tabId;
-          const fresh_groups = await get_tab_groups(active_username);
-          const srcIdx = fresh_groups.findIndex(g => g.id === source_group_id);
-          const dstIdx = fresh_groups.findIndex(g => g.id === target_group_id);
-
-          if (srcIdx !== -1 && dstIdx !== -1 && activeKeyCache) {
-            const srcData = JSON.parse(await decrypt(fresh_groups[srcIdx], activeKeyCache));
-            const dstData = JSON.parse(await decrypt(fresh_groups[dstIdx], activeKeyCache));
-
-            const tabIdx = srcData.tabs.findIndex(t => t.id === dragged_tab_id);
-            if (tabIdx !== -1) {
-              const [movedTab] = srcData.tabs.splice(tabIdx, 1);
-              dstData.tabs.push(movedTab);
-
-              const srcEnc = await encrypt(JSON.stringify(srcData), activeKeyCache);
-              const dstEnc = await encrypt(JSON.stringify(dstData), activeKeyCache);
-
-              fresh_groups[srcIdx] = { ...fresh_groups[srcIdx], iv: srcEnc.iv, ciphertext: srcEnc.ciphertext };
-              fresh_groups[dstIdx] = { ...fresh_groups[dstIdx], iv: dstEnc.iv, ciphertext: dstEnc.ciphertext };
-
-              await save_tab_groups(active_username, fresh_groups);
-              show_toast(`Moved "${movedTab.title || 'Tab'}" to ${dstData.name || 'group'}.`, 'success');
-              await render_page(activeKeyCache);
-            }
-          }
-        } catch (err) {
-          console.error('Cross-group drag failed:', err);
-          show_toast('Failed to move tab across groups.', 'error');
-        }
+        await handle_cross_group_tab_move(source_group_id, target_group_id, drag_state.dragged_element.dataset.tabId);
       }
     });
 
     tabs_list.appendChild(tab_element);
     selection_state.all_tab_elements.push(tab_element);
   });
+
+  // Support drop directly on tabs_list container (e.g. empty workspaces or dropping below items)
+  tabs_list.addEventListener('dragover', (e) => {
+    if (drag_state.dragged_element) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      tabs_list.classList.add('drag-over');
+    }
+  });
+
+  tabs_list.addEventListener('dragleave', (e) => {
+    if (e.target === tabs_list) {
+      tabs_list.classList.remove('drag-over');
+    }
+  });
+
+  tabs_list.addEventListener('drop', async (e) => {
+    if (e.target !== tabs_list && !e.target.classList.contains('empty-group-dropzone')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    tabs_list.classList.remove('drag-over');
+    if (!drag_state.dragged_element) return;
+
+    const source_group_id = drag_state.dragged_group_id;
+    const target_group_id = group_id;
+
+    if (source_group_id === target_group_id) {
+      tabs_list.appendChild(drag_state.dragged_element);
+      persist_tab_reorder(group_id, tabs_list);
+    } else {
+      await handle_cross_group_tab_move(source_group_id, target_group_id, drag_state.dragged_element.dataset.tabId);
+    }
+  });
+
+  if (group_data.tabs.length === 0) {
+    const emptyZone = document.createElement('div');
+    emptyZone.className = 'empty-group-dropzone';
+    emptyZone.style.cssText = 'padding:14px; text-align:center; font-size:12px; color:var(--text-secondary); border:1px dashed var(--border-color); border-radius:6px; margin:4px 0;';
+    emptyZone.textContent = 'Drop tabs here to add them to this workspace';
+    tabs_list.appendChild(emptyZone);
+  }
 
   group_element.appendChild(header);
   group_element.appendChild(tabs_list);
@@ -2919,8 +3011,6 @@ function create_group_element(group_id, group_data, group_index = 0, envelope = 
       document.querySelectorAll('.export-dropdown-menu').forEach(m => { if (m !== exportMenu) m.classList.remove('show'); });
       exportMenu.classList.toggle('show');
     });
-
-    document.addEventListener('click', () => exportMenu.classList.remove('show'));
 
     const cleanTitle = (group_data.name || 'session').replace(/[^a-zA-Z0-9_\-]/g, '_');
     const dlFile = (content, filename, type) => {

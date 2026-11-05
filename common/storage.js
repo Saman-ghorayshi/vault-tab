@@ -336,7 +336,7 @@ export async function purge_expired_or_burner_groups(username, purge_all_burners
 
   for (const group of groups) {
     const is_expired = group.expires_at && now >= group.expires_at;
-    const should_purge = (purge_all_burners && group.is_burner) || is_expired;
+    const should_purge = (purge_all_burners && (group.is_burner || group.burn_on_restore)) || is_expired;
 
     if (should_purge) {
       purged_count++;

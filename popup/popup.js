@@ -429,7 +429,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       // build the tab data payload and encrypt it
       const tab_data = {
         date: new Date().toISOString(),
-        tabs: tabs_to_save
+        tabs: tabs_to_save,
+        native_groups: (native_groups && Object.keys(native_groups).length > 0) ? native_groups : undefined
       };
 
       // AI semantic auto-naming: use the trained embedder to suggest a group name
