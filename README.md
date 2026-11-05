@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/Saman-ghorayshi/vault-tab/actions/workflows/test.yml"><img src="https://github.com/Saman-ghorayshi/vault-tab/actions/workflows/test.yml/badge.svg" alt="CI Build Status"></a>
-  <img src="https://img.shields.io/badge/tests-52%20passing-success?style=flat-square" alt="52 Automated Tests">
+  <img src="https://img.shields.io/badge/tests-60%20passing-success?style=flat-square" alt="60 Automated Tests">
   <img src="https://img.shields.io/badge/node-20%20%7C%2022%20%7C%2024-blue?style=flat-square" alt="Node Supported Matrix">
   <img src="https://img.shields.io/badge/security-AES--256--GCM-10b981?style=flat-square" alt="AES-256-GCM">
   <img src="https://img.shields.io/badge/auth-WebAuthn%20Passkeys-38bdf8?style=flat-square" alt="WebAuthn Passkeys">
@@ -113,7 +113,7 @@ git clone https://github.com/Saman-ghorayshi/vault-tab.git
 | **Markdown / Netscape Export** | **Obsidian, Notion & HTML Bookmarks** | Plaintext Only | Plaintext Only | CSV / JSON |
 | **Local Vector Semantic Search** | **In-Browser Word2Vec (Quantized)** | Substring Only | Substring Only | Keyword Only |
 | **Telemetry & Trackers** | **0% (100% Offline by Default)** | Analytics Trackers | Analytics Trackers | Crash Telemetry |
-| **Automated Unit Testing** | **52 Passing Tests (Node 20/22/24)** | Closed Source | Closed Source | Open Source Suite |
+| **Automated Unit Testing** | **60 Passing Tests (Node 20/22/24)** | Closed Source | Closed Source | Open Source Suite |
 
 ---
 
