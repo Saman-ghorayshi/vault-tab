@@ -245,6 +245,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     locked_view.classList.add('hidden');
     unlocked_view.classList.remove('hidden');
     if (current_user_label) current_user_label.textContent = session_user;
+      // Update live window tab stats
+      try {
+        const currentWindowTabs = await chrome.tabs.query({ currentWindow: true }) || [];
+        const statsText = document.getElementById('popup-tab-stats-text');
+        if (statsText) {
+          const mb = currentWindowTabs.length * 85;
+          const ramFormatted = mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : mb + ' MB';
+          statsText.textContent = `${currentWindowTabs.length} tabs open in this window (~${ramFormatted} RAM)`;
+        }
+      } catch (_) {}
+
   } else if (all_users.length === 0) {
       // first run: no users exist, show setup
       render_setup_view(true);
@@ -422,8 +433,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       };
 
       // AI semantic auto-naming: use the trained embedder to suggest a group name
-      const suggested_name = await try_suggest_group_name(tabs_to_save, session_user, session_key);
-      if (suggested_name) tab_data.name = suggested_name;
+      const custom_name = document.getElementById('popup-session-name')?.value?.trim();
+      if (custom_name) {
+        tab_data.name = custom_name;
+      } else {
+        const suggested_name = await try_suggest_group_name(tabs_to_save, session_user, session_key);
+        if (suggested_name) tab_data.name = suggested_name;
+      }
 
       const encrypted = await encrypt(JSON.stringify(tab_data), session_key);
       const is_burner = document.getElementById('popup-burner-toggle')?.checked || false;

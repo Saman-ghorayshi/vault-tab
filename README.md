@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/Saman-ghorayshi/vault-tab/actions/workflows/test.yml"><img src="https://github.com/Saman-ghorayshi/vault-tab/actions/workflows/test.yml/badge.svg" alt="CI Build Status"></a>
-  <img src="https://img.shields.io/badge/tests-46%20passing-success?style=flat-square" alt="46 Automated Tests">
+  <img src="https://img.shields.io/badge/tests-52%20passing-success?style=flat-square" alt="52 Automated Tests">
   <img src="https://img.shields.io/badge/node-20%20%7C%2022%20%7C%2024-blue?style=flat-square" alt="Node Supported Matrix">
   <img src="https://img.shields.io/badge/security-AES--256--GCM-10b981?style=flat-square" alt="AES-256-GCM">
   <img src="https://img.shields.io/badge/auth-WebAuthn%20Passkeys-38bdf8?style=flat-square" alt="WebAuthn Passkeys">
@@ -64,6 +64,13 @@ Unlike traditional tab managers that store raw URLs and unencrypted titles in pl
 - **Native Group Preservation**: Captures and persists Chromium colored tab groups (title, color, collapsed state).
 - **Persona Reconstitution**: Upon restoration, native `chrome.tabGroups` APIs reconstruct the exact visual tab groups, allowing seamless switching between isolated research personas.
 
+### 5. 🚀 Commercial Productivity & Intelligence Suite
+- **Spotlight Command Palette (`Ctrl+K` / `Cmd+K`)**: Floating command launcher for rapid keyboard navigation, instant tab jumping, and one-key vault operations.
+- **Vault Intelligence & Memory Dashboard**: Real-time analytics tracking estimated RAM liberated, zero-knowledge encryption status, and duplicate radar.
+- **Smart One-Click Deduplication**: Automatically detects redundant URLs across all sessions and prunes duplicates while preserving session structure.
+- **Multi-Format Exporter**: One-click export to GitHub-Flavored Markdown (for Obsidian/Notion), Netscape HTML Bookmarks (for browser imports), CSV spreadsheets, or raw URLs.
+- **Cross-Group Tab Drag & Drop**: Seamlessly reorganize tabs across encrypted workspaces with automatic re-encryption and state persistence.
+
 ---
 
 ## ⚡ Quick Start (Install in 30 Seconds)
@@ -101,9 +108,12 @@ git clone https://github.com/Saman-ghorayshi/vault-tab.git
 | **Ephemeral RAM Isolation** | **`chrome.storage.session` (Zero Disk)** | Plaintext Disk | Plaintext Disk | RAM Process Cache |
 | **Air-Gapped P2P Transfer** | **E2EE URL Hash + SVG QR** | Plaintext Export | Plaintext Export | Cloud Sync Only |
 | **Forensic Audit Proofs** | **`.vaultproof` (ECDSA P-256)** | Unsupported | Unsupported | Unsupported |
+| **Command Palette (`Ctrl+K`)** | **Raycast-Style Fast Launcher** | Unsupported | Unsupported | Quick Search |
+| **Smart Deduplication** | **Multi-Session URL Radar** | Manual | Manual | Duplicate Alerts |
+| **Markdown / Netscape Export** | **Obsidian, Notion & HTML Bookmarks** | Plaintext Only | Plaintext Only | CSV / JSON |
 | **Local Vector Semantic Search** | **In-Browser Word2Vec (Quantized)** | Substring Only | Substring Only | Keyword Only |
 | **Telemetry & Trackers** | **0% (100% Offline by Default)** | Analytics Trackers | Analytics Trackers | Crash Telemetry |
-| **Automated Unit Testing** | **46 Passing Tests (Node 20/22/24)** | Closed Source | Closed Source | Open Source Suite |
+| **Automated Unit Testing** | **52 Passing Tests (Node 20/22/24)** | Closed Source | Closed Source | Open Source Suite |
 
 ---
 
@@ -146,7 +156,8 @@ graph TD
 - <kbd>Alt+Shift+S</kbd> — Instantly encrypts and vaults all tabs in the active window.
 - <kbd>Ctrl+Shift+X</kbd> (<kbd>Cmd+Shift+X</kbd> on macOS) — **Emergency Panic Wipe**: Immediately purges active encryption keys and locks vault.
 
-### Manager Page Navigation
+### Manager Page & Spotlight Navigation
+- <kbd>Ctrl+K</kbd> / <kbd>Cmd+K</kbd> — **Raycast-Style Command Palette**: Jump to any tab or trigger actions instantly.
 - <kbd>J</kbd> / <kbd>K</kbd> — Vim-style down/up navigation across tab groups.
 - <kbd>X</kbd> — Select focused tab and advance cursor.
 - <kbd>O</kbd> / <kbd>Enter</kbd> — Open selected tab(s).
@@ -178,7 +189,7 @@ VaultTab can sync encrypted backups to your private Google Drive app-data folder
 
 ## 🧪 Automated Test Suite
 
-VaultTab maintains an automated test suite with **46 test cases** passing across Node 20.x, 22.x, and 24.x:
+VaultTab maintains an automated test suite with **52 test cases** passing across Node 20.x, 22.x, and 24.x:
 
 ```bash
 npm test
@@ -192,11 +203,12 @@ npm test
 ✔ AI EMBEDDER: Web Worker training, quantization & cosine ranking (1 test)
 ✔ FREEZE-FRAME: Canonical RFC 8785 JSON, SHA-256 state tree & ECDSA P-256 verification (5 tests)
 ✔ P2P SHARE: Base64URL, Gzip stream compression, AES-GCM URL hash & vector QR (7 tests)
+✔ PRODUCTIVITY: Smart URL normalization, multi-session dedup & format exports (6 tests)
 ✔ SECURITY AUDIT: URL scheme injection (20+ vectors), username prototype pollution & WebAuthn flag tampering (4 tests)
 ✔ TAB GROUPS: Color validation, native group serialization & persona reconstruction (4 tests)
 ✔ WEBAUTHN: ASN.1 DER to IEEE P1363 raw signature conversions (2 tests)
 
-Total: 46 passing (0 failures, 100% green CI)
+Total: 52 passing (0 failures, 100% green CI)
 ```
 
 ---

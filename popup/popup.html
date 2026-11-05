@@ -56,21 +56,35 @@
     </div>
   </div>
 
-  <!-- unlocked view -->
+    <!-- unlocked view -->
   <div id="unlocked-view" class="hidden">
     <div class="container">
-      <h1>VaultTab</h1>
-      <p>Signed in as <span id="current-user-label" class="user-label"></span></p>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+        <h1 style="margin:0; font-size:20px;">VaultTab</h1>
+        <span style="font-size:10px; font-weight:700; background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); padding:2px 6px; border-radius:4px;">Armed</span>
+      </div>
+      <p style="margin-bottom:12px; font-size:12px; text-align:left;">User: <strong id="current-user-label" class="user-label" style="color:#fff;"></strong></p>
+
+      <div id="popup-tab-stats" style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:8px 12px; border-radius:8px; font-size:11px; color:var(--text-secondary); margin-bottom:12px; display:flex; align-items:center; gap:6px;">
+        <span>💾</span> <span id="popup-tab-stats-text">Analyzing tabs...</span>
+      </div>
+
+      <div class="form-group" style="margin-bottom:10px;">
+        <input type="text" id="popup-session-name" placeholder="Session name (e.g. DeFi Audit, Dev Stack)" style="padding:10px; font-size:12px;" />
+      </div>
+
       <div class="button-group">
-        <label class="burner-toggle-label" style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);cursor:pointer;margin-bottom:6px;">
+        <label class="burner-toggle-label" style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);cursor:pointer;margin-bottom:8px;">
           <input type="checkbox" id="popup-burner-toggle" />
           <span>🔥 Burner (Self-Destruct on Restore)</span>
         </label>
-        <button id="save-tabs-button" class="primary-button">Save All Tabs</button>
-        <button id="save-current-tab-button" class="secondary-button">Save This Tab</button>
-        <button id="view-tabs-button" class="secondary-button">View Saved Tabs</button>
-        <button id="popup-add-account-button" class="secondary-button">+ Add Account</button>
-        <button id="popup-lock-button" class="secondary-button" style="color:var(--error)">Lock</button>
+        <button id="save-tabs-button" class="primary-button" style="padding:12px; font-weight:600;">Save All Tabs (Alt+Shift+S)</button>
+        <button id="save-current-tab-button" class="secondary-button">Save Current Tab (Ctrl+Shift+S)</button>
+        <button id="view-tabs-button" class="secondary-button" style="border-color:rgba(255,255,255,0.2);">Open Manager (⌘K)</button>
+        <div style="display:flex; gap:8px; margin-top:4px;">
+          <button id="popup-add-account-button" class="secondary-button" style="flex:1; font-size:11px;">+ Account</button>
+          <button id="popup-lock-button" class="secondary-button" style="flex:1; font-size:11px; color:var(--error); border-color:rgba(244,67,54,0.3);">Lock</button>
+        </div>
       </div>
     </div>
   </div>

@@ -17,6 +17,8 @@ import { sync_to_drive, download_from_drive } from '../common/sync.js';
 import { create_p2p_share_link } from '../common/p2p_share.js';
 import { create_audit_manifest, sign_audit_manifest_ecdsa, sign_audit_manifest_webauthn } from '../common/freeze_frame.js';
 import { plan_group_reconstruction, apply_group_reconstruction } from '../common/tab_groups.js';
+import { scan_for_duplicates, deduplicate_groups } from '../common/dedup.js';
+import { format_as_markdown, format_as_html_bookmarks, format_as_csv } from '../common/export_formats.js';
 
 const VERIFIER_STRING = 'aegis-verification-string';
 
@@ -1485,6 +1487,270 @@ async function restore_tabs_batched(tabs_or_urls, incognito = false, native_grou
   }
 }
 
+
+// --- VaultTab Commercial Intelligence & Command Palette ---
+let latestDecryptedResults = [];
+let activeKeyCache = null;
+
+function update_stats_dashboard(decryptedResults) {
+  latestDecryptedResults = decryptedResults;
+  const banner = document.getElementById('stats-dashboard-banner');
+  if (!banner) return;
+
+  const validGroups = decryptedResults.filter(r => !r.error && r.data);
+  let totalTabs = 0;
+  for (const g of validGroups) {
+    totalTabs += (g.data.tabs ? g.data.tabs.length : 0);
+  }
+
+  banner.classList.remove('hidden');
+  const ramVal = document.getElementById('stat-ram-value');
+  const ramCount = document.getElementById('stat-ram-count');
+  const sessionsVal = document.getElementById('stat-sessions-value');
+  const dupsVal = document.getElementById('stat-duplicates-value');
+  const dupsDesc = document.getElementById('stat-duplicates-desc');
+  const dedupBtn = document.getElementById('stat-dedup-btn');
+
+  if (ramVal) {
+    const mbSaved = totalTabs * 85;
+    ramVal.textContent = mbSaved >= 1024 ? (mbSaved / 1024).toFixed(1) + ' GB' : mbSaved + ' MB';
+  }
+  if (ramCount) ramCount.textContent = `${totalTabs} tabs`;
+  if (sessionsVal) sessionsVal.textContent = validGroups.length.toString();
+
+  const dupResult = scan_for_duplicates(validGroups.map(g => ({ id: g.id, name: g.data.name, tabs: g.data.tabs })));
+  if (dupsVal) dupsVal.textContent = dupResult.duplicateCount.toString();
+  if (dupsDesc) dupsDesc.textContent = dupResult.duplicateCount === 0 ? 'Clean state' : `${dupResult.duplicateCount} redundant`;
+  if (dedupBtn) {
+    if (dupResult.duplicateCount > 0) {
+      dedupBtn.classList.remove('hidden');
+      dedupBtn.onclick = () => execute_deduplication();
+    } else {
+      dedupBtn.classList.add('hidden');
+    }
+  }
+}
+
+async function execute_deduplication() {
+  if (!activeKeyCache) return;
+  const validGroups = latestDecryptedResults.filter(r => !r.error && r.data).map(r => ({ id: r.id, ...r.data }));
+  const { cleanedGroups, removedCount } = deduplicate_groups(validGroups);
+
+  if (removedCount === 0) {
+    show_toast('No duplicate tabs to remove.', 'info');
+    return;
+  }
+
+  try {
+    const fresh_envelopes = await get_tab_groups(active_username);
+    const updated_envelopes = [];
+
+    for (const cleaned of cleanedGroups) {
+      const re_enc = await encrypt(JSON.stringify(cleaned), activeKeyCache);
+      const existingEnv = fresh_envelopes.find(e => e.id === cleaned.id);
+      updated_envelopes.push({
+        id: cleaned.id,
+        iv: re_enc.iv,
+        ciphertext: re_enc.ciphertext,
+        is_burner: existingEnv?.is_burner,
+        burn_on_restore: existingEnv?.burn_on_restore,
+        expires_at: existingEnv?.expires_at
+      });
+    }
+
+    await save_tab_groups(active_username, updated_envelopes);
+    show_toast(`🧹 Cleaned ${removedCount} duplicate tab${removedCount > 1 ? 's' : ''} across workspaces.`, 'success');
+    await render_page(activeKeyCache);
+  } catch (err) {
+    show_toast('Deduplication failed: ' + (err?.message || err), 'error');
+  }
+}
+
+// Command Palette System
+function setup_command_palette() {
+  const modal = document.getElementById('command-palette-modal');
+  const input = document.getElementById('cmd-palette-search');
+  const results = document.getElementById('cmd-palette-results');
+  const triggerBtn = document.getElementById('cmd-k-trigger');
+  if (!modal || !input || !results) return;
+
+  let selectedIdx = 0;
+  let currentItems = [];
+
+  const defaultActions = [
+    { id: 'act-save-all', title: 'Save All Tabs in Active Window', icon: '💾', category: 'Actions', run: async () => {
+      try {
+        const tabs = await chrome.tabs.query({ currentWindow: true });
+        const valid = tabs.filter(t => is_restorable_url(t.url));
+        if (valid.length) {
+          const fresh_groups = await get_tab_groups(active_username);
+          const new_data = { name: `Saved Window (${new Date().toLocaleTimeString()})`, date: new Date().toISOString(), tabs: valid.map(t => ({ id: crypto.randomUUID(), url: t.url, title: t.title })) };
+          const enc = await encrypt(JSON.stringify(new_data), activeKeyCache);
+          fresh_groups.unshift({ id: crypto.randomUUID(), iv: enc.iv, ciphertext: enc.ciphertext });
+          await save_tab_groups(active_username, fresh_groups);
+          show_toast(`Saved ${valid.length} tabs.`, 'success');
+          await render_page(activeKeyCache);
+        }
+      } catch (e) { show_toast('Save failed: ' + e.message, 'error'); }
+    }},
+    { id: 'act-dedup', title: 'Scan & Clean Duplicate Tabs', icon: '🧹', category: 'Actions', run: execute_deduplication },
+    { id: 'act-copy-all-md', title: 'Copy All Sessions as Markdown', icon: '📋', category: 'Export', run: async () => {
+      const valid = latestDecryptedResults.filter(r => !r.error && r.data);
+      const mdAll = valid.map(r => format_as_markdown(r.data)).join('\n\n---\n\n');
+      await navigator.clipboard.writeText(mdAll);
+      show_toast('All workspaces copied to clipboard as Markdown.', 'success');
+    }},
+    { id: 'act-lock', title: 'Lock Vault Now', icon: '🔒', category: 'Security', run: () => {
+      const lockBtn = document.getElementById('lock-button');
+      if (lockBtn) lockBtn.click();
+    }},
+    { id: 'act-panic', title: 'Emergency Panic Wipe (Purge RAM & Close)', icon: '🚨', category: 'Security', run: () => {
+      try { chrome.runtime.sendMessage({ type: 'vaulttab:panic-wipe' }); } catch(_) {}
+      window.close();
+    }}
+  ];
+
+  function render_palette_items(filterText = '') {
+    const q = filterText.trim().toLowerCase();
+    results.innerHTML = '';
+    currentItems = [];
+
+    // 1. Filter actions
+    const matchedActions = defaultActions.filter(a => !q || a.title.toLowerCase().includes(q) || a.category.toLowerCase().includes(q));
+    if (matchedActions.length > 0) {
+      const catHeader = document.createElement('div');
+      catHeader.className = 'cmd-palette-group-title';
+      catHeader.textContent = 'Commands & Actions';
+      results.appendChild(catHeader);
+
+      matchedActions.forEach(a => {
+        const itemEl = document.createElement('div');
+        itemEl.className = 'cmd-palette-item';
+        itemEl.innerHTML = `
+          <div class="cmd-palette-item-main">
+            <span class="cmd-palette-item-icon">${a.icon}</span>
+            <span class="cmd-palette-item-text">${escapeHtml(a.title)}</span>
+          </div>
+          <span class="cmd-palette-badge">${a.category}</span>
+        `;
+        itemEl.onclick = () => { close_palette(); a.run(); };
+        results.appendChild(itemEl);
+        currentItems.push({ el: itemEl, run: a.run });
+      });
+    }
+
+    // 2. Filter tabs
+    const matchedTabs = [];
+    latestDecryptedResults.forEach(r => {
+      if (r.error || !r.data || !r.data.tabs) return;
+      r.data.tabs.forEach(t => {
+        if (!q || (t.title && t.title.toLowerCase().includes(q)) || (t.url && t.url.toLowerCase().includes(q))) {
+          matchedTabs.push({ tab: t, groupName: r.data.name });
+        }
+      });
+    });
+
+    if (matchedTabs.length > 0) {
+      const catHeader = document.createElement('div');
+      catHeader.className = 'cmd-palette-group-title';
+      catHeader.textContent = `Tabs (${matchedTabs.length})`;
+      results.appendChild(catHeader);
+
+      matchedTabs.slice(0, 30).forEach(({ tab, groupName }) => {
+        const itemEl = document.createElement('div');
+        itemEl.className = 'cmd-palette-item';
+        itemEl.innerHTML = `
+          <div class="cmd-palette-item-main">
+            <span class="cmd-palette-item-icon">🔗</span>
+            <div style="overflow:hidden; text-overflow:ellipsis;">
+              <div style="font-weight:600; font-size:12px;">${escapeHtml(tab.title || tab.url)}</div>
+              <div style="font-size:10px; color:var(--text-secondary);">${escapeHtml(groupName || 'Workspace')} • ${escapeHtml(tab.url)}</div>
+            </div>
+          </div>
+          <span class="cmd-palette-badge">Open ↵</span>
+        `;
+        itemEl.onclick = () => { close_palette(); window.open(tab.url, '_blank', 'noopener,noreferrer'); };
+        results.appendChild(itemEl);
+        currentItems.push({ el: itemEl, run: () => window.open(tab.url, '_blank', 'noopener,noreferrer') });
+      });
+    }
+
+    selectedIdx = 0;
+    update_selected_highlight();
+  }
+
+  function update_selected_highlight() {
+    currentItems.forEach((item, idx) => {
+      if (idx === selectedIdx) {
+        item.el.classList.add('selected');
+        item.el.scrollIntoView({ block: 'nearest' });
+      } else {
+        item.el.classList.remove('selected');
+      }
+    });
+  }
+
+  function open_palette() {
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+    input.value = '';
+    render_palette_items('');
+    input.focus();
+  }
+
+  function close_palette() {
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
+  }
+
+  input.addEventListener('input', () => {
+    render_palette_items(input.value);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (currentItems.length > 0) {
+        selectedIdx = (selectedIdx + 1) % currentItems.length;
+        update_selected_highlight();
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (currentItems.length > 0) {
+        selectedIdx = (selectedIdx - 1 + currentItems.length) % currentItems.length;
+        update_selected_highlight();
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (currentItems[selectedIdx]) {
+        close_palette();
+        currentItems[selectedIdx].run();
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      close_palette();
+    }
+  });
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) close_palette();
+  });
+
+  if (triggerBtn) triggerBtn.onclick = open_palette;
+
+  // Global keydown listener for Ctrl+K / Cmd+K
+  window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      if (modal.classList.contains('hidden') || modal.style.display === 'none') {
+        open_palette();
+      } else {
+        close_palette();
+      }
+    }
+  });
+}
+
 // render the page: decrypt all groups in parallel using Promise.all
 async function render_page(key) {
   const loading_message = document.getElementById('loading-message');
@@ -1580,6 +1846,8 @@ async function render_page(key) {
 
     loading_message.classList.add('hidden');
     groups_container.classList.remove('hidden');
+    activeKeyCache = key;
+    update_stats_dashboard(decrypted_results);
 
     // load the saved neural network model if it exists
     load_saved_model();
@@ -2371,7 +2639,18 @@ function create_group_element(group_id, group_data, group_index = 0, envelope = 
   actions_div.innerHTML =
     '<button class="restore-button secondary-button">Restore All</button>' +
     '<button class="restore-private-button private-restore-button">Incognito</button>' + // Clearer intent
-    '<button class="export-urls-button secondary-button">Export URLs</button>' +
+    
+    '<div class="export-dropdown-wrap">' +
+      '<button class="export-urls-button secondary-button" title="Export session in multiple formats">Export ▾</button>' +
+      '<div class="export-dropdown-menu">' +
+        '<button class="export-menu-item exp-copy-md">📋 Copy Markdown</button>' +
+        '<button class="export-menu-item exp-dl-md">💾 Markdown (.md)</button>' +
+        '<button class="export-menu-item exp-dl-html">📑 HTML Bookmarks</button>' +
+        '<button class="export-menu-item exp-dl-csv">📊 CSV Spreadsheet</button>' +
+        '<button class="export-menu-item exp-dl-txt">📝 Plain Text URLs</button>' +
+      '</div>' +
+    '</div>' +
+
     '<button class="share-p2p-button secondary-button" title="Air-gapped serverless E2EE share & QR code">⚡ Share P2P</button>' +
     '<button class="audit-proof-button secondary-button" title="Export hardware-signed forensic audit proof (.vaultproof)">🛡️ Audit Proof</button>' +
     '<button class="delete-button">Delete Group</button>'; // Clearer intent
@@ -2494,28 +2773,62 @@ function create_group_element(group_id, group_data, group_index = 0, envelope = 
       tab_element.classList.remove('drag-over');
     });
 
-    tab_element.addEventListener('drop', (e) => {
+        tab_element.addEventListener('drop', async (e) => {
       e.preventDefault();
       e.stopPropagation();
       tab_element.classList.remove('drag-over');
-      if (!drag_state.dragged_element || drag_state.dragged_group_id !== group_id) return;
+      if (!drag_state.dragged_element) return;
       if (drag_state.dragged_element === tab_element) return;
 
-      // reorder in the dom first for immediate visual feedback
-      const tabs_list_el = tab_element.parentElement;
-      const dragged = drag_state.dragged_element;
-      const all_items = [...tabs_list_el.querySelectorAll('.tab-item')];
-      const from_index = all_items.indexOf(dragged);
-      const to_index = all_items.indexOf(tab_element);
+      const source_group_id = drag_state.dragged_group_id;
+      const target_group_id = group_id;
 
-      if (from_index < to_index) {
-        tabs_list_el.insertBefore(dragged, tab_element.nextSibling);
+      if (source_group_id === target_group_id) {
+        // Reorder in same group
+        const tabs_list_el = tab_element.parentElement;
+        const dragged = drag_state.dragged_element;
+        const all_items = [...tabs_list_el.querySelectorAll('.tab-item')];
+        const from_index = all_items.indexOf(dragged);
+        const to_index = all_items.indexOf(tab_element);
+        if (from_index < to_index) {
+          tabs_list_el.insertBefore(dragged, tab_element.nextSibling);
+        } else {
+          tabs_list_el.insertBefore(dragged, tab_element);
+        }
+        persist_tab_reorder(group_id, tabs_list_el);
       } else {
-        tabs_list_el.insertBefore(dragged, tab_element);
-      }
+        // Cross-Group Transfer: Move tab from source_group to target_group
+        try {
+          const dragged_tab_id = drag_state.dragged_element.dataset.tabId;
+          const fresh_groups = await get_tab_groups(active_username);
+          const srcIdx = fresh_groups.findIndex(g => g.id === source_group_id);
+          const dstIdx = fresh_groups.findIndex(g => g.id === target_group_id);
 
-      // persist the new order to storage
-      persist_tab_reorder(group_id, tabs_list_el);
+          if (srcIdx !== -1 && dstIdx !== -1 && activeKeyCache) {
+            const srcData = JSON.parse(await decrypt(fresh_groups[srcIdx], activeKeyCache));
+            const dstData = JSON.parse(await decrypt(fresh_groups[dstIdx], activeKeyCache));
+
+            const tabIdx = srcData.tabs.findIndex(t => t.id === dragged_tab_id);
+            if (tabIdx !== -1) {
+              const [movedTab] = srcData.tabs.splice(tabIdx, 1);
+              dstData.tabs.push(movedTab);
+
+              const srcEnc = await encrypt(JSON.stringify(srcData), activeKeyCache);
+              const dstEnc = await encrypt(JSON.stringify(dstData), activeKeyCache);
+
+              fresh_groups[srcIdx] = { ...fresh_groups[srcIdx], iv: srcEnc.iv, ciphertext: srcEnc.ciphertext };
+              fresh_groups[dstIdx] = { ...fresh_groups[dstIdx], iv: dstEnc.iv, ciphertext: dstEnc.ciphertext };
+
+              await save_tab_groups(active_username, fresh_groups);
+              show_toast(`Moved "${movedTab.title || 'Tab'}" to ${dstData.name || 'group'}.`, 'success');
+              await render_page(activeKeyCache);
+            }
+          }
+        } catch (err) {
+          console.error('Cross-group drag failed:', err);
+          show_toast('Failed to move tab across groups.', 'error');
+        }
+      }
     });
 
     tabs_list.appendChild(tab_element);
@@ -2596,7 +2909,63 @@ function create_group_element(group_id, group_data, group_index = 0, envelope = 
     execute_group_restore(true);
   });
 
-  group_element.querySelector('.export-urls-button').addEventListener('click', () => {
+  
+  // Multi-format export dropdown
+  const exportBtn = group_element.querySelector('.export-urls-button');
+  const exportMenu = group_element.querySelector('.export-dropdown-menu');
+  if (exportBtn && exportMenu) {
+    exportBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.export-dropdown-menu').forEach(m => { if (m !== exportMenu) m.classList.remove('show'); });
+      exportMenu.classList.toggle('show');
+    });
+
+    document.addEventListener('click', () => exportMenu.classList.remove('show'));
+
+    const cleanTitle = (group_data.name || 'session').replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const dlFile = (content, filename, type) => {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    };
+
+    exportMenu.querySelector('.exp-copy-md')?.addEventListener('click', async () => {
+      const md = format_as_markdown(group_data);
+      await navigator.clipboard.writeText(md);
+      show_toast('Markdown copied to clipboard.', 'success');
+      exportMenu.classList.remove('show');
+    });
+
+    exportMenu.querySelector('.exp-dl-md')?.addEventListener('click', () => {
+      dlFile(format_as_markdown(group_data), `${cleanTitle}-${Date.now()}.md`, 'text/markdown');
+      exportMenu.classList.remove('show');
+    });
+
+    exportMenu.querySelector('.exp-dl-html')?.addEventListener('click', () => {
+      dlFile(format_as_html_bookmarks(group_data), `${cleanTitle}-bookmarks.html`, 'text/html');
+      exportMenu.classList.remove('show');
+    });
+
+    exportMenu.querySelector('.exp-dl-csv')?.addEventListener('click', () => {
+      dlFile(format_as_csv(group_data), `${cleanTitle}.csv`, 'text/csv');
+      exportMenu.classList.remove('show');
+    });
+
+    exportMenu.querySelector('.exp-dl-txt')?.addEventListener('click', () => {
+      const txt = group_data.tabs.map(t => t.url).join('\n');
+      dlFile(txt, `${cleanTitle}-urls.txt`, 'text/plain');
+      exportMenu.classList.remove('show');
+    });
+  }
+
+  /* legacy single export replaced */
+  const unusedExport = () => {
     const urls_text = group_data.tabs.map(tab => tab.url).join('\n');
     const blob = new Blob([urls_text], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);

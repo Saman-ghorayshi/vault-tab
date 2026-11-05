@@ -27,6 +27,7 @@
         </label>
         <input type="file" id="import-file" accept=".txt" style="display: none;">
         <input type="file" id="import-backup-file" accept=".vaulttab,.aegis" style="display: none;">
+        <button id="cmd-k-trigger" class="cmd-k-pill" title="Open Command Palette (Ctrl+K or Cmd+K)"><kbd>⌘K</kbd> Command Palette</button>
         <button id="import-button" class="secondary-button">Import URLs</button>
         <button id="export-backup-button" class="secondary-button">Export Backup</button>
         <button id="import-backup-button" class="secondary-button">Import Backup</button>
@@ -67,6 +68,31 @@
           <p style="margin:4px 0 0;font-size:13px;color:var(--text-secondary)">Permanently delete your account and all saved tabs.</p>
         </div>
         <button id="manager-show-delete-modal" class="secondary-button" style="color:var(--error);border-color:var(--error)">Delete Account</button>
+      </div>
+    </div>
+
+    
+    <!-- Vault Intelligence & Memory Stats Banner -->
+    <div id="stats-dashboard-banner" class="stats-dashboard-banner hidden">
+      <div class="stat-widget">
+        <span class="stat-widget-label">💾 RAM Liberated</span>
+        <span id="stat-ram-value" class="stat-widget-value">0 MB</span>
+        <span class="stat-widget-sub"><span>Suspended Tabs</span><span id="stat-ram-count" style="color:var(--success)">0 tabs</span></span>
+      </div>
+      <div class="stat-widget">
+        <span class="stat-widget-label">🗄️ Protected Assets</span>
+        <span id="stat-sessions-value" class="stat-widget-value">0</span>
+        <span class="stat-widget-sub"><span>Zero-Knowledge Workspaces</span><span id="stat-encrypted-tag" style="color:var(--accent)">Encrypted</span></span>
+      </div>
+      <div class="stat-widget">
+        <span class="stat-widget-label">🛡️ Security Status</span>
+        <span id="stat-security-value" class="stat-widget-value" style="font-size:16px;color:#10b981;">AES-256-GCM</span>
+        <span class="stat-widget-sub"><span>600k PBKDF2 Iterations</span><span id="stat-passkey-status" style="color:#38bdf8;">Hardware FIDO2</span></span>
+      </div>
+      <div class="stat-widget">
+        <span class="stat-widget-label">🧹 Duplicate Radar</span>
+        <span id="stat-duplicates-value" class="stat-widget-value">0</span>
+        <span class="stat-widget-sub"><span id="stat-duplicates-desc">Clean state</span><button id="stat-dedup-btn" class="stat-action-btn hidden">Clean Duplicates</button></span>
       </div>
     </div>
 
@@ -315,5 +341,23 @@
   </div>
 
   <script type="module" src="manager.js"></script>
+
+  <!-- Command Palette Modal (Ctrl+K / Cmd+K) -->
+  <div id="command-palette-modal" class="cmd-palette-backdrop hidden" style="display:none;" role="dialog" aria-modal="true">
+    <div class="cmd-palette-container">
+      <div class="cmd-palette-input-wrap">
+        <span class="cmd-palette-icon">⌘</span>
+        <input type="text" id="cmd-palette-search" class="cmd-palette-input" placeholder="Type a command or search tabs... (Press Esc to exit)" autocomplete="off" />
+      </div>
+      <div id="cmd-palette-results" class="cmd-palette-results">
+        <!-- Populated dynamically -->
+      </div>
+      <div class="cmd-palette-footer">
+        <span>Use <kbd>↑</kbd> <kbd>↓</kbd> to navigate, <kbd>Enter</kbd> to select</span>
+        <span><kbd>Esc</kbd> to close</span>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>
