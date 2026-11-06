@@ -191,13 +191,14 @@ VaultTab can sync encrypted backups to your private Google Drive app-data folder
 
 ## 🧪 Automated Test Suite
 
-VaultTab maintains an automated test suite with **52 test cases** passing across Node 20.x, 22.x, and 24.x:
+VaultTab maintains an automated test suite with **60 test cases** passing across Node 20.x, 22.x, and 24.x:
 
 ```bash
 npm test
 ```
 
 ```
+✔ AUDIT: Adversarial security, injection vectors, deduplication & panics (8 tests)
 ✔ BURNER: TTL Expiration and Panic Purge Logic (2 tests)
 ✔ CRYPTO: PBKDF2 600,000 key derivation & AES-256-GCM round-trip (5 tests)
 ✔ DEADLOCK & CONCURRENCY: Mutex lease expiration & tab crash resilience (2 tests)
@@ -210,7 +211,7 @@ npm test
 ✔ TAB GROUPS: Color validation, native group serialization & persona reconstruction (4 tests)
 ✔ WEBAUTHN: ASN.1 DER to IEEE P1363 raw signature conversions (2 tests)
 
-Total: 52 passing (0 failures, 100% green CI)
+Total: 60 passing (0 failures, 100% green CI)
 ```
 
 ---
