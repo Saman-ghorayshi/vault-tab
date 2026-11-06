@@ -17,7 +17,7 @@
   <a href="https://saman-ghorayshi.github.io/vault-tab/"><strong>🧪 Launch Interactive Web Demo &raquo;</strong></a> &nbsp;&bull;&nbsp;
   <a href="docs/ARCHITECTURE.md"><strong>📖 Architecture Specification &raquo;</strong></a> &nbsp;&bull;&nbsp;
   <a href="docs/SECURITY.md"><strong>🛡️ Security Whitepaper &raquo;</strong></a> &nbsp;&bull;&nbsp;
-  <a href="https://github.com/Saman-ghorayshi/vault-tab/releases/latest/download/vaulttab-v2.3.0.zip"><strong>📦 Download Extension (.zip) &raquo;</strong></a>
+  <a href="https://github.com/Saman-ghorayshi/vault-tab/releases/latest/download/vaulttab-v2.4.0.zip"><strong>📦 Download Extension (.zip) &raquo;</strong></a>
 </p>
 
 ---
@@ -31,12 +31,14 @@
 </p>
 
 > [!TIP]
-> **Real-World Workflow Shown Above:**
+> **Real-World High-Stakes Workflow Shown Above:**
 > 1. **Tab Clutter & Memory Hog**: 6 active research & DeFi tabs consuming 2,140 MB of RAM.
 > 2. **One-Click Zero-Knowledge Stash**: VaultTab popup derives an AES-256 key via 600,000 PBKDF2 iterations and encrypts the session payload with a 128-bit MAC tag.
 > 3. **Instant RAM Recovery**: Active tabs collapse into memory-free suspension, dropping browser memory usage to 24 MB (-98.8% freed).
-> 4. **Neural Semantic Search**: Client-side Word2Vec neural vector search matches conceptual queries (*"liquidity pool swap"*) with 0.96 cosine similarity ranking.
-> 5. **Hardware Passkey Restore**: TouchID / YubiKey FIDO2 assertion securely decrypts and restores tabs in 14ms.
+> 4. **Spotlight Command Palette (`Ctrl+K` / `⌘K`)**: Rapid Raycast-style launcher for instant tab jumping and zero-click vault operations.
+> 5. **Smart Radar Deduplication**: Automatically detects redundant tabs across all encrypted workspaces and purges duplicates with 1 click.
+> 6. **Forensic Freeze-Frame Proofs**: Generates hardware-signed `.vaultproof` bundles with ECDSA P-256 and RFC 8785 canonical SHA-256 state tree digests.
+> 7. **Hardware Passkey Restore**: TouchID / YubiKey FIDO2 assertion securely decrypts and restores tabs directly into native colored Chromium tab groups.
 
 Unlike traditional tab managers that store raw URLs and unencrypted titles in plaintext LevelDB/SQLite files, VaultTab protects every record with **hardware-bound WebAuthn Passkeys (TouchID / Windows Hello / YubiKey)**, **600,000 PBKDF2-HMAC-SHA256 iterations**, and **AES-256-GCM authenticated encryption**.
 
@@ -92,7 +94,7 @@ git clone https://github.com/Saman-ghorayshi/vault-tab.git
 ```
 
 ### Method 2: Packaged Release (.zip)
-1. Download [vaulttab-v2.3.0.zip](https://github.com/Saman-ghorayshi/vault-tab/releases/latest/download/vaulttab-v2.3.0.zip).
+1. Download [vaulttab-v2.4.0.zip](https://github.com/Saman-ghorayshi/vault-tab/releases/latest/download/vaulttab-v2.4.0.zip).
 2. Unzip the archive into any local folder.
 3. In `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, and select the unzipped directory.
 

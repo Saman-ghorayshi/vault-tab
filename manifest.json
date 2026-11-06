@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "VaultTab — Secure & Encrypted Tab Manager",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Securely save, organize, and search your browser tabs with Zero-Knowledge AES-256-GCM encryption, WebAuthn passkeys, and on-device AI.",
   "permissions": [
     "storage",

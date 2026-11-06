@@ -1,6 +1,6 @@
 {
-  "name": "aegis-tab",
-  "version": "1.0.0",
+  "name": "vault-tab",
+  "version": "2.4.0",
   "description": "Zero-Knowledge, privacy-first browser tab manager for Manifest V3 featuring AES-256-GCM encryption, hardware WebAuthn passkeys, and on-device semantic clustering.",
   "type": "module",
   "scripts": {

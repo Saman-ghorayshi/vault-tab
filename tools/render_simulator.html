@@ -595,6 +595,135 @@
   }
   .toast-banner svg { width: 14px; height: 14px; color: var(--emerald); }
 
+  /* Command Palette Modal (Ctrl+K) */
+  .cmd-palette-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(3, 6, 11, 0.82);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 60px;
+    z-index: 250;
+  }
+  .cmd-palette-box {
+    width: 520px;
+    background: #0d1527;
+    border: 1px solid var(--border-bright);
+    border-radius: 12px;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9), 0 0 30px rgba(56, 189, 248, 0.25);
+    overflow: hidden;
+    font-family: var(--font-sans);
+  }
+  .cmd-palette-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    background: #080d1a;
+  }
+  .cmd-palette-input-wrap span { font-size: 18px; color: var(--cyan); }
+  .cmd-palette-search {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    font-size: 14px;
+    color: #fff;
+    font-family: var(--font-sans);
+  }
+  .cmd-palette-list {
+    padding: 8px;
+    max-height: 280px;
+  }
+  .cmd-group-title {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    font-weight: 700;
+    padding: 6px 10px 4px;
+    font-family: var(--font-mono);
+  }
+  .cmd-palette-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: default;
+  }
+  .cmd-palette-item.active {
+    background: var(--cyan-dim);
+    color: #fff;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+  }
+  .cmd-item-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+  }
+  .cmd-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+  }
+  .cmd-palette-footer {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: #070b14;
+    border-top: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+  }
+
+  /* Freeze-Frame Audit Proof Card */
+  .proof-modal-box {
+    width: 480px;
+    background: #0c1424;
+    border: 1px solid var(--emerald);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9), 0 0 30px rgba(16, 185, 129, 0.3);
+    font-family: var(--font-sans);
+  }
+  .proof-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 12px;
+    margin-bottom: 14px;
+  }
+  .proof-header-title {
+    font-size: 14px;
+    font-weight: 800;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .proof-digest-box {
+    background: #060911;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.6;
+    margin-bottom: 14px;
+  }
+
   /* Animated Simulated Cursor */
   .virtual-cursor {
     position: absolute;
@@ -710,6 +839,10 @@
       `;
     } else if (mode === 'restored') {
       tabStrip.innerHTML = `
+        <div style="background:rgba(168,85,247,0.25);border:1px solid #a855f7;color:#c084fc;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;display:flex;align-items:center;gap:5px;height:24px;margin-bottom:2px;">
+          <span style="width:6px;height:6px;border-radius:50%;background:#a855f7"></span>
+          Solana DeFi
+        </div>
         <div class="tab active">
           <span class="tab-icon">🟣</span>
           <span class="tab-title">Raydium AMM Swap</span>
@@ -732,6 +865,89 @@
         </div>
       `;
     }
+  }
+
+  function getManagerBaseHTML(withDedupCleaned = false) {
+    const dedupText = withDedupCleaned ? '0 Redundant (Clean)' : '1 Redundant Tab';
+    const dedupColor = withDedupCleaned ? 'var(--emerald)' : 'var(--amber)';
+    return `
+      <div class="manager-view">
+        <div class="manager-head">
+          <div class="manager-title-row">
+            <div class="manager-h1">VaultTab Manager</div>
+            <div class="manager-badge">ZERO-KNOWLEDGE VAULT</div>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">
+            Signed in as <strong>saman</strong> · Hardware Key Registered
+          </div>
+        </div>
+
+        <!-- Real-Time Metrics & Command Launcher -->
+        <div style="display:flex;gap:10px;margin-bottom:14px;">
+          <div style="flex:1;background:#091020;border:1px solid #1f2c47;border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:8px;">
+            <span style="font-size:16px;">⚡</span>
+            <div>
+              <div style="font-size:9px;color:var(--text-dim);font-family:var(--font-mono);">MEMORY LIBERATED</div>
+              <div style="font-size:12px;font-weight:700;color:var(--emerald);">2,116 MB (-98.8%)</div>
+            </div>
+          </div>
+          <div style="flex:1;background:#091020;border:1px solid #1f2c47;border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:8px;">
+            <span style="font-size:16px;">🔐</span>
+            <div>
+              <div style="font-size:9px;color:var(--text-dim);font-family:var(--font-mono);">ENCRYPTION</div>
+              <div style="font-size:12px;font-weight:700;color:var(--cyan);">Zero-Knowledge AES-256</div>
+            </div>
+          </div>
+          <div style="flex:1;background:#091020;border:1px solid #1f2c47;border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:8px;">
+            <span style="font-size:16px;">🧹</span>
+            <div style="flex:1;">
+              <div style="font-size:9px;color:var(--text-dim);font-family:var(--font-mono);">DUPLICATE RADAR</div>
+              <div style="font-size:12px;font-weight:700;color:${dedupColor};">${dedupText}</div>
+            </div>
+          </div>
+          <div style="background:var(--cyan-dim);border:1px solid var(--cyan);color:var(--cyan);border-radius:8px;padding:0 14px;font-weight:700;font-size:11px;display:flex;align-items:center;gap:6px;">
+            <kbd style="background:rgba(255,255,255,0.1);padding:2px 5px;border-radius:4px;font-family:var(--font-mono);">⌘K</kbd> Palette
+          </div>
+        </div>
+
+        <div class="manager-search-bar">
+          <input type="text" class="manager-search-input" value="" placeholder="Search tabs... (e.g. domain:solana title:defi or full semantic phrase)" readonly />
+          <div class="semantic-toggle-badge" style="opacity:0.6">
+            <span>⚡ Word2Vec Semantic: OFF</span>
+          </div>
+        </div>
+        <div class="groups-grid">
+          <div class="session-card">
+            <div class="card-top">
+              <div class="session-title">
+                <span>🗃️</span> Solana Research &amp; AMM Pools
+                <span class="cipher-pill">AES-256-GCM · 6 Tabs</span>
+              </div>
+              <div style="font-size:10px;color:var(--text-dim);font-family:var(--font-mono)">Just now</div>
+            </div>
+            <div class="card-tabs-list">
+              <div class="tab-row">
+                <span>🟣 Raydium | Concentrated Liquidity AMM Swap</span>
+                <span style="color:var(--cyan);font-family:var(--font-mono);font-size:10px">raydium.io</span>
+              </div>
+              <div class="tab-row">
+                <span>🟢 Solana Devnet Explorer &amp; RPC Health</span>
+                <span style="color:var(--cyan);font-family:var(--font-mono);font-size:10px">explorer.solana.com</span>
+              </div>
+              <div class="tab-row">
+                <span>🟡 CoinGecko: SOL / USD Market Realtime</span>
+                <span style="color:var(--cyan);font-family:var(--font-mono);font-size:10px">coingecko.com</span>
+              </div>
+            </div>
+            <div class="card-actions">
+              <button class="btn-sm-primary">Restore Group</button>
+              <button class="btn-sm-sec">⚡ Share P2P</button>
+              <button class="btn-sm-sec" style="color:var(--cyan);border-color:var(--cyan)">🛡️ Audit Proof</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   function getRaydiumMockHTML() {
@@ -907,66 +1123,108 @@
     ramBadge.className = 'ram-badge freed';
     extIcon.className = 'extension-icon';
 
-    viewport.innerHTML = `
-      <div class="manager-view">
-        <div class="manager-head">
-          <div class="manager-title-row">
-            <div class="manager-h1">VaultTab Manager</div>
-            <div class="manager-badge">ZERO-KNOWLEDGE VAULT</div>
-          </div>
-          <div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">
-            Signed in as <strong>saman</strong> · Hardware Key Registered
-          </div>
-        </div>
-        <div class="manager-search-bar">
-          <input type="text" class="manager-search-input" value="" placeholder="Search tabs... (e.g. domain:solana title:defi or full semantic phrase)" readonly />
-          <div class="semantic-toggle-badge" style="opacity:0.6">
-            <span>⚡ Word2Vec Semantic: OFF</span>
-          </div>
-        </div>
-        <div class="groups-grid">
-          <div class="session-card">
-            <div class="card-top">
-              <div class="session-title">
-                <span>🗃️</span> Solana Research &amp; AMM Pools
-                <span class="cipher-pill">AES-256-GCM · 6 Tabs</span>
-              </div>
-              <div style="font-size:10px;color:var(--text-dim);font-family:var(--font-mono)">Just now</div>
-            </div>
-            <div class="card-tabs-list">
-              <div class="tab-row">
-                <span>🟣 Raydium | Concentrated Liquidity AMM Swap</span>
-                <span style="color:var(--cyan);font-family:var(--font-mono);font-size:10px">raydium.io</span>
-              </div>
-              <div class="tab-row">
-                <span>🟢 Solana Devnet Explorer &amp; RPC Health</span>
-                <span style="color:var(--cyan);font-family:var(--font-mono);font-size:10px">explorer.solana.com</span>
-              </div>
-              <div class="tab-row">
-                <span>🟡 CoinGecko: SOL / USD Market Realtime</span>
-                <span style="color:var(--cyan);font-family:var(--font-mono);font-size:10px">coingecko.com</span>
-              </div>
-            </div>
-            <div class="card-actions">
-              <button class="btn-sm-primary">Restore Group</button>
-              <button class="btn-sm-sec">Copy URLs</button>
-            </div>
-          </div>
+    viewport.innerHTML = getManagerBaseHTML(false);
+    cursor.style.top = '78px';
+    cursor.style.left = '870px';
+  }
 
-          <div class="session-card" style="opacity:0.75">
-            <div class="card-top">
-              <div class="session-title">
-                <span>🗃️</span> Zero-Knowledge Succinct Proofs &amp; Circom
-                <span class="cipher-pill">AES-256-GCM · 8 Tabs</span>
+  // 4b: Spotlight Command Palette (Ctrl+K / Cmd+K)
+  else if (step === '4b') {
+    renderTabs('manager');
+    urlText.innerHTML = '<span class="url-host">chrome-extension://vault-tab</span><span class="url-path">/manager_page/manager.html</span>';
+    ramBadge.innerHTML = '✨ RAM: 24 MB (-98.8%)';
+    ramBadge.className = 'ram-badge freed';
+
+    viewport.innerHTML = getManagerBaseHTML(false) + `
+      <div class="cmd-palette-backdrop">
+        <div class="cmd-palette-box">
+          <div class="cmd-palette-input-wrap">
+            <span>⌘</span>
+            <input type="text" class="cmd-palette-search" value="Audit" readonly />
+            <span class="cmd-badge" style="background:var(--cyan-dim);color:var(--cyan);border:1px solid var(--cyan)">Esc to close</span>
+          </div>
+          <div class="cmd-palette-list">
+            <div class="cmd-group-title">Commands &amp; Actions</div>
+            <div class="cmd-palette-item active">
+              <div class="cmd-item-left">
+                <span>🛡️</span>
+                <span>Export Hardware Audit Proof (.vaultproof)</span>
               </div>
-              <div style="font-size:10px;color:var(--text-dim);font-family:var(--font-mono)">2 hours ago</div>
+              <span class="cmd-badge">Security ↵</span>
             </div>
+            <div class="cmd-palette-item">
+              <div class="cmd-item-left">
+                <span>🧹</span>
+                <span>Scan &amp; Clean 1 Duplicate Tab</span>
+              </div>
+              <span class="cmd-badge">Actions</span>
+            </div>
+            <div class="cmd-palette-item">
+              <div class="cmd-item-left">
+                <span>⚡</span>
+                <span>Generate Air-Gapped P2P QR Code</span>
+              </div>
+              <span class="cmd-badge">Air-Gap</span>
+            </div>
+          </div>
+          <div class="cmd-palette-footer">
+            <span>Use ↑ ↓ to navigate · Enter to execute</span>
+            <span>VaultTab Pro Launcher</span>
           </div>
         </div>
       </div>
     `;
-    cursor.style.top = '125px';
-    cursor.style.left = '360px';
+    cursor.style.top = '145px';
+    cursor.style.left = '480px';
+  }
+
+  // 4c: Clean Deduplication Toast
+  else if (step === '4c') {
+    renderTabs('manager');
+    urlText.innerHTML = '<span class="url-host">chrome-extension://vault-tab</span><span class="url-path">/manager_page/manager.html</span>';
+    ramBadge.innerHTML = '✨ RAM: 24 MB (-98.8%)';
+    ramBadge.className = 'ram-badge freed';
+
+    viewport.innerHTML = getManagerBaseHTML(true) + `
+      <div class="toast-banner" style="background:#0b1926;border-color:var(--amber);box-shadow:0 0 20px rgba(251,191,36,0.35)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+        🧹 Cleaned 1 redundant tab across workspaces · 0 Redundancy
+      </div>
+    `;
+    cursor.style.top = '78px';
+    cursor.style.left = '640px';
+  }
+
+  // 5c: Forensic Freeze-Frame Proof (.vaultproof) Hardware Assertion Modal
+  else if (step === '5c') {
+    renderTabs('manager');
+    urlText.innerHTML = '<span class="url-host">chrome-extension://vault-tab</span><span class="url-path">/manager_page/manager.html</span>';
+    ramBadge.innerHTML = '✨ RAM: 24 MB (-98.8%)';
+    ramBadge.className = 'ram-badge freed';
+
+    viewport.innerHTML = getManagerBaseHTML(true) + `
+      <div class="modal-overlay">
+        <div class="proof-modal-box">
+          <div class="proof-header">
+            <div class="proof-header-title">
+              <span>🛡️</span> Hardware-Signed Audit Proof (.vaultproof)
+            </div>
+            <span class="modal-status-badge">ECDSA P-256</span>
+          </div>
+          <div class="proof-digest-box">
+            <div style="color:var(--text-dim)">// RFC 8785 Canonical State Digest (SHA-256):</div>
+            <div style="color:var(--emerald);word-break:break-all">9f83ac2b7c014e82b498f3ec9104b901a...8e21</div>
+            <div style="margin-top:6px;color:var(--text-dim)">// Signer: FIDO2 Hardware Authenticator (saman)</div>
+            <div style="color:var(--cyan)">Signature: MEQCID9a8...f10a82 (IEEE P1363 Valid)</div>
+          </div>
+          <button class="popup-btn-primary" style="background:var(--emerald);color:#04070e;font-size:12px;">
+            ✓ Download Verified .vaultproof Bundle
+          </button>
+        </div>
+      </div>
+    `;
+    cursor.style.top = '340px';
+    cursor.style.left = '480px';
   }
 
   // 5a: User typing query in search bar: "liquidity"

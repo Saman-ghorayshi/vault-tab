@@ -19,6 +19,7 @@ build/
 *.zip
 *.crx
 *.pem
+tools/frames/
 
 # leftover backup folders from early development
 **/New folder/

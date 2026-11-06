@@ -13,19 +13,18 @@ frames_dir = os.path.join(tools_dir, "frames")
 os.makedirs(frames_dir, exist_ok=True)
 os.makedirs(assets_dir, exist_ok=True)
 
-# 11-step realistic workflow sequence
+# 10-step realistic high-stakes workflow sequence
 sequence = [
     ("1", 1200, "01_cluttered_tabs_high_ram.png"),
-    ("1b", 700, "02_hover_extension_icon.png"),
-    ("2", 1400, "03_popup_open_encrypt_cta.png"),
-    ("3a", 900, "04_pbkdf2_key_derivation.png"),
-    ("3b", 1400, "05_aes_gcm_stashed_toast.png"),
-    ("4", 1600, "06_manager_ram_freed.png"),
-    ("5a", 800, "07_search_typing_liquidity.png"),
-    ("5b", 2200, "08_semantic_vector_matches.png"),
-    ("6a", 1000, "09_webauthn_touch_prompt.png"),
-    ("6b", 1400, "10_webauthn_hardware_verified.png"),
-    ("7", 2200, "11_tabs_restored_active.png"),
+    ("2", 1300, "02_popup_open_encrypt_stash.png"),
+    ("3b", 1200, "03_aes_gcm_stashed_toast.png"),
+    ("4", 1400, "04_manager_metrics_and_radar.png"),
+    ("4b", 2200, "05_spotlight_command_palette.png"),
+    ("4c", 1300, "06_deduplication_clean_toast.png"),
+    ("5b", 1800, "07_semantic_vector_matches.png"),
+    ("5c", 1800, "08_hardware_freeze_frame_proof.png"),
+    ("6b", 1200, "09_webauthn_hardware_verified.png"),
+    ("7", 2400, "10_tabs_restored_native_groups.png"),
 ]
 
 captured_images = []
@@ -56,8 +55,8 @@ for step, duration, filename in sequence:
     durations.append(duration)
 
 # Also update the static manager & demo preview assets with these high quality renders
-Image.open(os.path.join(frames_dir, "08_semantic_vector_matches.png")).save(os.path.join(assets_dir, "vaulttab-manager-ui.png"))
-Image.open(os.path.join(frames_dir, "05_aes_gcm_stashed_toast.png")).save(os.path.join(assets_dir, "vaulttab-live-demo.png"))
+Image.open(os.path.join(frames_dir, "05_spotlight_command_palette.png")).save(os.path.join(assets_dir, "vaulttab-manager-ui.png"))
+Image.open(os.path.join(frames_dir, "03_aes_gcm_stashed_toast.png")).save(os.path.join(assets_dir, "vaulttab-live-demo.png"))
 
 # Save animated GIF
 gif_path = os.path.join(assets_dir, "vaulttab-demo.gif")
@@ -69,6 +68,14 @@ captured_images[0].save(
     loop=0,
     optimize=True
 )
+
+# Also sync to docs/assets for GitHub Pages
+docs_assets_dir = os.path.join(base_dir, "docs", "assets")
+if os.path.exists(docs_assets_dir):
+    import shutil
+    shutil.copy2(gif_path, os.path.join(docs_assets_dir, "vaulttab-demo.gif"))
+    shutil.copy2(os.path.join(assets_dir, "vaulttab-manager-ui.png"), os.path.join(docs_assets_dir, "vaulttab-manager-ui.png"))
+    shutil.copy2(os.path.join(assets_dir, "vaulttab-live-demo.png"), os.path.join(docs_assets_dir, "vaulttab-live-demo.png"))
 
 gif_size_kb = os.path.getsize(gif_path) / 1024
 print(f"SUCCESS: Saved studio animated screencast GIF to {gif_path} ({gif_size_kb:.1f} KB)")
